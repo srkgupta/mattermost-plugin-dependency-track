@@ -1,0 +1,114 @@
+package main
+
+import (
+	"fmt"
+	"strings"
+
+	"github.com/mattermost/mattermost-plugin-api/experimental/command"
+	"github.com/mattermost/mattermost-server/v5/model"
+	"github.com/mattermost/mattermost-server/v5/plugin"
+	"github.com/pkg/errors"
+)
+
+const (
+	dependencytrackCommand = "/dtrack"
+	helpCmdKey             = "help"
+	projectCmdKey          = "project"
+	permissionsCmdKey      = "permissions"
+	subscribeCmdKey        = "subscriptions"
+	cmdError               = "Command Error"
+)
+
+// type CommandHandlerFunc func(p *Plugin, c *plugin.Context, header *model.CommandArgs, args ...string) *model.CommandResponse
+
+const helpText = "###### Mattermost DependencyTrack Plugin\n" +
+	"* `/dtrack project <command>` - Available subcommands: reference, sync.\n" +
+	"* `/dtrack subscriptions <command>` - Available subcommands: list, add, delete. Subscribe the current channel to receive DependencyTrack notifications. Once a channel is subscribed, the service will listen to any Webhook Events from the DependencyTrack tool and publish it on the subscribed channel\n" +
+	"* `/dtrack permissions <command>` - Available subcommands: list, add, delete. Access Control users who can run DependencyTrack slash commands.\n" +
+	""
+
+func (p *Plugin) getCommand(config *configuration) (*model.Command, error) {
+	iconData, err := command.GetIconData(p.API, "assets/icon.svg")
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to get icon data")
+	}
+
+	return &model.Command{
+		Trigger:              dependencytrackCommand,
+		AutoComplete:         true,
+		AutoCompleteDesc:     "Available commands: help, permissions, project, subscriptions",
+		AutoCompleteHint:     "[command]",
+		AutocompleteData:     getAutocompleteData(config),
+		AutocompleteIconData: iconData,
+	}, nil
+}
+
+func (p *Plugin) ExecuteCommand(c *plugin.Context, args *model.CommandArgs) (*model.CommandResponse, *model.AppError) {
+	split := strings.Fields(args.Command)
+	command := ""
+
+	if 1 < len(split) {
+		command = split[1]
+	}
+
+	if command == helpCmdKey {
+		return p.sendEphemeralResponse(args, helpText), nil
+	}
+
+	isAllowed, err := p.IsAuthorized(args.UserId)
+	msg := ""
+	if err != nil {
+		msg = fmt.Sprintf("error occurred while authorizing the command: %v", err)
+		return p.sendEphemeralResponse(args, msg), nil
+	}
+	if !isAllowed {
+		msg := fmt.Sprintf("%s commands can only be executed by a system administrator or a list of users whitelisted. Please ask your system administrator to run the command, eg: `/%s permissions add @user1` to whitelist a specific user.", dependencytrackCommand, dependencytrackCommand)
+		return p.sendEphemeralResponse(args, msg), nil
+	}
+
+	switch command {
+	case projectCmdKey:
+		return p.sendEphemeralResponse(args, "Coming Soon"), nil
+	case subscribeCmdKey:
+		return p.executeSubscriptions(args, split[2:])
+	case permissionsCmdKey:
+		return p.executePermissions(args, split[2:])
+	default:
+		return p.sendEphemeralResponse(args, helpText), nil
+	}
+}
+
+func getAutocompleteData(config *configuration) *model.AutocompleteData {
+	dtrack := model.NewAutocompleteData(dependencytrackCommand, "[command]", "Available commands: help, permissions, project, subscriptions")
+
+	help := model.NewAutocompleteData(helpCmdKey, "", "Display Slash Command help text")
+	dtrack.AddCommand(help)
+
+	subscriptions := model.NewAutocompleteData(subscribeCmdKey, "[command]", "Available commands: list, add, delete")
+
+	subscribeAdd := model.NewAutocompleteData("add", "", "When executed, the current channel will be subscribed to receive notifications. This command will print the URL which should be configured as Outbound Webhooks URL in the DependencyTrack Tool. Once subscribed, the service will listen to any Webhook Events from the DependencyTrack tool and publish it on the subscribed channel.")
+	subscriptions.AddCommand(subscribeAdd)
+
+	subscribeDelete := model.NewAutocompleteData("delete", "[index]", "The specified channel will stop receiving any notifications for any events from the DependencyTrack tool. You can run the command '/dtrack subscriptions list' to get the index position.")
+	subscriptions.AddCommand(subscribeDelete)
+
+	subscribeList := model.NewAutocompleteData("list", "", "Lists all the channels which has been set to receive DependencyTrack notifications")
+	subscriptions.AddCommand(subscribeList)
+
+	dtrack.AddCommand(subscriptions)
+
+	permissions := model.NewAutocompleteData(permissionsCmdKey, "[command]", "Available commands: list, allow, remove")
+
+	permissionAdd := model.NewAutocompleteData("add", "@username", "Whitelist the user to run the DependencyTrack slash commands. "+permissionNote)
+	permissions.AddCommand(permissionAdd)
+
+	permissionsRemove := model.NewAutocompleteData("delete", "@username", "Remove the user from running the DependencyTrack slash commands. "+permissionNote)
+	permissions.AddCommand(permissionsRemove)
+
+	permissionsList := model.NewAutocompleteData("list", "", "List all the users who are allowed to run the DependencyTrack slash commands. "+permissionNote)
+	permissions.AddCommand(permissionsList)
+
+	dtrack.AddCommand(permissions)
+
+	return dtrack
+}
