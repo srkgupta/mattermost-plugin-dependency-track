@@ -171,7 +171,22 @@ func (p *Plugin) handleSubscribesAdd(args *model.CommandArgs) (*model.CommandRes
 		msg := fmt.Sprintf("Something went wrong while subscribing. Error: %s\n", err.Error())
 		return p.sendEphemeralResponse(args, msg), nil
 	}
-	msg := "Subscription successful."
+	msg := fmt.Sprintf(
+		":white_check_mark: Subscription saved! \n"+
+			"#### How to finish setup:\n"+
+			"(See the full guide [here](%s/admin-guide/configuration))\n"+
+			"1. Create a New Outbound Webhook in the DependencyTrack tool. [Instructions here](https://docs.dependencytrack.org/integrations/notifications/)\n"+
+			"2. Set the Webhook URL as: `%s`\n"+
+			"3. Enable Notifications for following types of notifications: \n"+
+			"	- NEW_VULNERABILITY\n"+
+			"	- NEW_VULNERABLE_DEPENDENCY\n"+
+			"	- BOM_CONSUMED (Optional)\n"+
+			"	- BOM_PROCESSED (Optional)\n"+
+			"\n\n**Webhook URL: `%s`**",
+		dtrackPluginHomePage,
+		p.getWebhookURL(),
+		p.getWebhookURL(),
+	)
 	return p.sendEphemeralResponse(args, msg), nil
 }
 
@@ -197,15 +212,35 @@ func (p *Plugin) handleSubscriptionsList(args *model.CommandArgs) (*model.Comman
 		msg = fmt.Sprintf("Something went wrong while checking for subscriptions. Error: %s\n", err.Error())
 		return p.sendEphemeralResponse(args, msg), nil
 	}
+
+	value := ""
+
 	if len(subs) == 0 {
-		msg = "Currently there are no channels subscribed to receive DependencyTrack notifications."
-	} else {
-		msg = "Channels subscribed to receive DependencyTrack notifications:\n"
-		for i, v := range subs {
-			channel, _ := p.API.GetChannel(v.ChannelID)
-			msg += fmt.Sprintf("%d. ~%s\n", i+1, channel.Name)
-		}
+		value = "No channels are subscribed to receive any notifications from DependencyTrack tool."
 	}
-	return p.sendEphemeralResponse(args, msg), nil
+
+	for i, sub := range subs {
+		username := "Unknown user"
+		if user, appErr := p.API.GetUser(sub.CreatorID); appErr != nil {
+			p.API.LogError("Unable to get username", "userID", sub.CreatorID)
+		} else {
+			username = user.Username
+		}
+		channel, _ := p.API.GetChannel(sub.ChannelID)
+		value += fmt.Sprintf(
+			"%d. ~%s (Subscribed by: @%s)\n",
+			i+1,
+			channel.Name,
+			username,
+		)
+	}
+
+	attachment := model.SlackAttachment{
+		Title: "Channels subscribed to receive DependencyTrack Notifications:",
+		Text:  value,
+	}
+
+	p.sendEphemeralPost(args, "", []*model.SlackAttachment{&attachment})
+	return &model.CommandResponse{}, nil
 
 }

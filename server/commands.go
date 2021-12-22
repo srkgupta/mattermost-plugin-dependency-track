@@ -11,7 +11,7 @@ import (
 )
 
 const (
-	dependencytrackCommand = "/dtrack"
+	dependencytrackCommand = "dtrack"
 	helpCmdKey             = "help"
 	projectCmdKey          = "project"
 	permissionsCmdKey      = "permissions"

@@ -13,7 +13,9 @@ import (
 )
 
 const (
-	dependencytrackUsernameKey = "_dependencytrackusername"
+	dtrackUsernameKey    = "_dependencytrackusername"
+	dtrackPluginId       = "mattermost-plugin-dependency-track"
+	dtrackPluginHomePage = "https://github.com/srkgupta/mattermost-plugin-dependency-track"
 )
 
 var dependencytrackToUsernameMappingCallback func(string) string
@@ -93,7 +95,7 @@ func (p *Plugin) getdependencytrackToUsernameMapping(dependencytrackUsername str
 }
 
 func (p *Plugin) getdependencytrackToUserIDMapping(dependencytrackUsername string) string {
-	userID, _ := p.API.KVGet(dependencytrackUsername + dependencytrackUsernameKey)
+	userID, _ := p.API.KVGet(dependencytrackUsername + dtrackUsernameKey)
 	return string(userID)
 }
 

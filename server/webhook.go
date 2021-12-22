@@ -84,7 +84,7 @@ func (vuln *Vulnerability) ToUrl() string {
 }
 
 func (project *Project) ToMarkdown(dtUrl string) string {
-	return fmt.Sprintf("[%s](https://%s/projects/%s)", project.Name, dtUrl, project.Id)
+	return fmt.Sprintf("[%s](%s/projects/%s)", project.Name, dtUrl, project.Id)
 }
 
 func (vuln *Vulnerability) ToMarkdown() string {

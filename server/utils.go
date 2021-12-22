@@ -1,6 +1,8 @@
 package main
 
 import (
+	"fmt"
+	"strings"
 	"time"
 
 	"github.com/mattermost/mattermost-server/v5/model"
@@ -53,4 +55,11 @@ func parseTime(input string) string {
 	} else {
 		return "-"
 	}
+}
+
+func (p *Plugin) getWebhookURL() string {
+	siteURL := *p.API.GetConfig().ServiceSettings.SiteURL
+	siteURL = strings.TrimRight(siteURL, "/")
+	webhookSecret := p.getConfiguration().WebhooksSecret
+	return fmt.Sprintf("%s/plugins/%s%s/%s", siteURL, dtrackPluginId, routeWebhooks, webhookSecret)
 }
