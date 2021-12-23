@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"strings"
 
 	"github.com/gorilla/mux"
 	"github.com/mattermost/mattermost-server/v5/model"
@@ -27,7 +28,7 @@ type Notification struct {
 		Vulnerability   Vulnerability   `json:"vulnerability,omitempty"`
 		Vulnerabilities []Vulnerability `json:"vulnerabilities,omitempty"`
 		Project         Project         `json:"project,omitempty"`
-		Projects        []Project       `json:"projects,omitempty"`
+		Projects        []Project       `json:"affectedProjects,omitempty"`
 		Analysis        Analysis        `json:"analysis,omitempty"`
 	}
 }
@@ -44,14 +45,14 @@ type Component struct {
 }
 
 type Vulnerability struct {
-	Id          string `json:"uuid"`
-	VulnId      string `json:"vulnId"`
-	Source      string `json:"source"`
-	Description string `json:"description"`
-	Cvss        string `json:"cvssv2"`
-	Severity    string `json:"severity"`
+	Id          string  `json:"uuid"`
+	VulnId      string  `json:"vulnId"`
+	Source      string  `json:"source"`
+	Description string  `json:"description"`
+	Cvss        float32 `json:"cvssv2"`
+	Severity    string  `json:"severity"`
 	Cwe         struct {
-		Id   string `json:"cweId"`
+		Id   int32  `json:"cweId"`
 		Name string `json:"name"`
 	}
 }
@@ -91,6 +92,22 @@ func (vuln *Vulnerability) ToMarkdown() string {
 	return fmt.Sprintf("[%s](%s)", vuln.VulnId, vuln.ToUrl())
 }
 
+func (vuln *Vulnerability) ToColor() string {
+	color := "#50F100" // green
+
+	switch strings.ToUpper(vuln.Severity) {
+	case "LOW":
+		color = "#ADD8E6" // light blue
+	case "MEDIUM":
+		color = "#FF8000" // orange
+	case "HIGH":
+		color = "#FF0000" // red
+	case "CRITICAL":
+		color = "#800000" // dark red
+	}
+	return color
+}
+
 // ToPost converts the WebhookInfo into a Post
 func (wi *WebhookInfo) ToPost() *model.Post {
 	message := ""
@@ -124,10 +141,18 @@ func (wi *WebhookInfo) ToPost() *model.Post {
 			Short: true,
 		})
 
-		message = "#### Affected Projects: \n"
+		affectedProjects := ""
+
 		for _, project := range wi.Notification.Subject.Projects {
-			message += fmt.Sprintf("- [%s](%s)\n", project.Name, project.ToMarkdown(wi.DependencyTrackUrl))
+			affectedProjects += fmt.Sprintf("[%s](%s)\n", project.Name, project.ToMarkdown(wi.DependencyTrackUrl))
 		}
+
+		fields = append(fields, &model.SlackAttachmentField{
+			Title: "Affected Projects",
+			Value: affectedProjects,
+			Short: true,
+		})
+		attachment.Color = wi.Notification.Subject.Vulnerability.ToColor()
 	}
 
 	if wi.Notification.Group == "BOM_CONSUMED" || wi.Notification.Group == "BOM_PROCESSED" {
@@ -136,24 +161,35 @@ func (wi *WebhookInfo) ToPost() *model.Post {
 			Value: wi.Notification.Subject.Project.ToMarkdown(wi.DependencyTrackUrl),
 			Short: true,
 		})
+		if wi.Notification.Group == "BOM_CONSUMED" {
+			attachment.Color = "#FF8000" // orange
+		}
 	}
 
 	if wi.Notification.Group == "NEW_VULNERABLE_DEPENDENCY" {
 		fields = append(fields, &model.SlackAttachmentField{
-			Title: "Project",
-			Value: wi.Notification.Subject.Project.ToMarkdown(wi.DependencyTrackUrl),
-			Short: true,
-		})
-		fields = append(fields, &model.SlackAttachmentField{
 			Title: "Component",
 			Value: wi.Notification.Subject.Component.PackageUrl,
-			Short: true,
+			Short: false,
 		})
-		message = "#### Vulnerabilities: \n"
-		message += "| Vuln Id | Severity | CVSS Score | Vuln Type | Source |\n |--- | --- | --- | --- | ---|\n"
+
+		fields = append(fields, &model.SlackAttachmentField{
+			Title: "Project",
+			Value: wi.Notification.Subject.Project.ToMarkdown(wi.DependencyTrackUrl),
+			Short: false,
+		})
+
+		vulns := "| Vuln Id | Severity | CVSS Score | Vuln Type | Source |\n |--- | --- | --- | --- | ---|\n"
 		for _, vuln := range wi.Notification.Subject.Vulnerabilities {
-			message += fmt.Sprintf("| %s | %s | %s | %s (%s) | %s | \n", vuln.ToMarkdown(), vuln.Severity, vuln.Cvss, vuln.Cwe.Name, vuln.Cwe.Id, vuln.Source)
+			vulns += fmt.Sprintf("| %s | %s | %.1f | %s | %s | \n", vuln.ToMarkdown(), vuln.Severity, vuln.Cvss, vuln.Cwe.Name, vuln.Source)
 		}
+		fields = append(fields, &model.SlackAttachmentField{
+			Title: "Vulnerabilities",
+			Value: vulns,
+			Short: false,
+		})
+
+		attachment.Color = "#FF0000" // red
 	}
 
 	attachment.Fields = fields
