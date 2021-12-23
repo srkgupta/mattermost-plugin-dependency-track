@@ -12,7 +12,6 @@ import (
 
 const (
 	SubscriptionsKey = "subscriptions"
-	WebhookAPI       = "subscriptions"
 )
 
 type Subscription struct {

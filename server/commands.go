@@ -68,7 +68,7 @@ func (p *Plugin) ExecuteCommand(c *plugin.Context, args *model.CommandArgs) (*mo
 
 	switch command {
 	case projectCmdKey:
-		return p.sendEphemeralResponse(args, "Coming Soon"), nil
+		return p.executeProjectCommand(args, split[2:])
 	case subscribeCmdKey:
 		return p.executeSubscriptions(args, split[2:])
 	case permissionsCmdKey:
@@ -109,6 +109,26 @@ func getAutocompleteData(config *configuration) *model.AutocompleteData {
 	permissions.AddCommand(permissionsList)
 
 	dtrack.AddCommand(permissions)
+
+	project := model.NewAutocompleteData(projectCmdKey, "[command]", "Available commands: reference, sync")
+
+	projectReference := model.NewAutocompleteData("reference", "", "This option is provided to consider the analysis for vulnerabilities for one project in reference to all the other projects.")
+
+	projectReferenceAdd := model.NewAutocompleteData("add", "<project_id>", "Enter the Project ID")
+	projectReference.AddCommand(projectReferenceAdd)
+
+	projectReferenceList := model.NewAutocompleteData("list", "", "List the reference project set")
+	projectReference.AddCommand(projectReferenceList)
+
+	projectReferenceDelete := model.NewAutocompleteData("delete", "", "Select this option to delete the previously set Reference Project ID")
+	projectReference.AddCommand(projectReferenceDelete)
+
+	project.AddCommand(projectReference)
+
+	projectSync := model.NewAutocompleteData("sync", "[reference_project_id, target_project_id]", "This command will check the status of all alerts from the reference_project_id and update the same to the target_project_id")
+	project.AddCommand(projectSync)
+
+	dtrack.AddCommand(project)
 
 	return dtrack
 }
