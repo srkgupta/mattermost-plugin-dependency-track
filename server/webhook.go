@@ -16,61 +16,6 @@ type WebhookInfo struct {
 	DependencyTrackUrl string
 }
 
-type Notification struct {
-	Level     string `json:"level"`
-	Scope     string `json:"scope"`
-	Group     string `json:"group"`
-	Timestamp string `json:"timestamp"`
-	Title     string `json:"title"`
-	Content   string `json:"content"`
-	Subject   struct {
-		Component       Component
-		Vulnerability   Vulnerability   `json:"vulnerability,omitempty"`
-		Vulnerabilities []Vulnerability `json:"vulnerabilities,omitempty"`
-		Project         Project         `json:"project,omitempty"`
-		Projects        []Project       `json:"affectedProjects,omitempty"`
-		Analysis        Analysis        `json:"analysis,omitempty"`
-	}
-}
-
-type Component struct {
-	Id         string `json:"uuid"`
-	Group      string `json:"group"`
-	Name       string `json:"name"`
-	Version    string `json:"version"`
-	Md5        string `json:"md5"`
-	Sha1       string `json:"sha1"`
-	Sha256     string `json:"sha256"`
-	PackageUrl string `json:"purl"`
-}
-
-type Vulnerability struct {
-	Id          string  `json:"uuid"`
-	VulnId      string  `json:"vulnId"`
-	Source      string  `json:"source"`
-	Description string  `json:"description"`
-	Cvss        float32 `json:"cvssv2"`
-	Severity    string  `json:"severity"`
-	Cwe         struct {
-		Id   int32  `json:"cweId"`
-		Name string `json:"name"`
-	}
-}
-
-type Project struct {
-	Id      string `json:"uuid"`
-	Name    string `json:"name"`
-	Version string `json:"version"`
-}
-
-type Analysis struct {
-	Suppresed       bool   `json:"suppressed"`
-	State           string `json:"state"`
-	ProjectId       string `json:"project"`
-	ComponentId     string `json:"component"`
-	VulnerabilityId string `json:"vulnerability"`
-}
-
 func (vuln *Vulnerability) ToUrl() string {
 	url := ""
 	switch vuln.Source {
@@ -85,7 +30,7 @@ func (vuln *Vulnerability) ToUrl() string {
 }
 
 func (project *Project) ToMarkdown(dtUrl string) string {
-	return fmt.Sprintf("[%s](%s/projects/%s)", project.Name, dtUrl, project.Id)
+	return fmt.Sprintf("[%s %s](%s/projects/%s)", project.Name, project.Version, dtUrl, project.Id)
 }
 
 func (vuln *Vulnerability) ToMarkdown() string {
@@ -222,10 +167,29 @@ func (p *Plugin) httpHandleWebhook(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// TODO: Perform an internal list of tasks based on configured reference project
-	// If Reference Project is configured, then check the status of the triggered Vulnerability in the reference project_id and the package versions.
-	// If the status in the reference project was suppressed, marked
-	// If it's not found, then display the notification
+	referenceProject, err := p.GetProjectReference()
+	if err != nil {
+		p.API.LogError("Unable to get project reference", "err", err)
+	}
+
+	if len(referenceProject) > 0 && wi.Notification.Group == "NEW_VULNERABILITY" {
+		analysis, err := p.fetchAnalysis(referenceProject, wi.Notification.Subject.Vulnerability.Id, wi.Notification.Subject.Component.Id)
+		if err != nil {
+			p.API.LogError("Unable to fetch Analysis for the default project", "err", err)
+		}
+		if len(analysis.State) > 0 {
+
+			// Update the status of the finding accordingly and suppress if previously suppressed.
+			for _, project := range wi.Notification.Subject.Projects {
+				if project.Id != referenceProject {
+
+					//TODO: Check the status of the finding for each project before updating the analysis
+					p.updateAnalysis(project.Id, wi.Notification.Subject.Vulnerability.Id, wi.Notification.Subject.Component.Id, analysis)
+				}
+			}
+			return
+		}
+	}
 
 	allSubs, err := p.GetSubscriptions()
 	if err != nil {
