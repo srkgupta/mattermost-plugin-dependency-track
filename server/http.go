@@ -8,11 +8,15 @@ import (
 )
 
 const (
-	routeWebhooks = "/hooks"
+	routeWebhooks     = "/hooks"
+	routeAutocomplete = "/autocomplete"
+	subrouteProjects  = "/projects"
 )
 
 func (p *Plugin) initializeRouter() {
 	p.router = mux.NewRouter()
+	autocompleteRouter := p.router.PathPrefix(routeAutocomplete).Subrouter()
+	autocompleteRouter.HandleFunc(subrouteProjects, p.autocompleteProjects).Methods("GET")
 
 	p.router.HandleFunc(routeWebhooks+"/{secret}", p.httpHandleWebhook).Methods("POST")
 }

@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"net/http"
 
 	"github.com/mattermost/mattermost-server/v5/model"
 	"github.com/pkg/errors"
@@ -72,12 +73,21 @@ func (p *Plugin) handleProjectReference(args *model.CommandArgs, split []string)
 		}
 		msg = "Reference project removed."
 	} else if split[1] == "add" {
-		if len(split) < 3 || split[2] == "" {
-			msg := "Incomplete arguments provided for the `/project reference add` command. Please provide the project_id"
+		if len(split) < 4 || split[2] != "--project" || split[3] == "" {
+			msg := "Incomplete arguments provided for the `/project reference add` command. Please provide the identifier of the project.\nExample: `/dtrack project reference add --project project_id`"
 			return p.sendEphemeralResponse(args, msg), nil
 
 		}
-		err := p.StoreProjectReference(split[2])
+
+		// Check if project is found and is active
+		projectId := split[3]
+		project, err := p.fetchProject(projectId)
+		if err != nil || !project.Active {
+			msg := fmt.Sprintf("Project not found or is inactive. Please recheck if the project_id %s is present and is active", projectId)
+			return p.sendEphemeralResponse(args, msg), nil
+		}
+
+		err = p.StoreProjectReference(projectId)
 		if err != nil {
 			msg := fmt.Sprintf("Something went wrong while deleting the project reference. Error: %s\n", err.Error())
 			return p.sendEphemeralResponse(args, msg), nil
@@ -98,9 +108,102 @@ func (p *Plugin) handleProjectReference(args *model.CommandArgs, split []string)
 }
 
 func (p *Plugin) handleProjectSync(args *model.CommandArgs, split []string) (*model.CommandResponse, *model.AppError) {
-	if len(split) < 3 || split[1] == "" || split[2] == "" {
-		msg := "Incomplete arguments provided for the `/project sync` command. Please provide reference_project_id and target_project_id"
+	// Expected cmd: /project sync --reference-project project1_id --target-project project2_id
+	if len(split) < 5 || split[1] != "--reference-project" || split[2] == "" || split[3] != "--target-project" || split[4] == "" {
+		msg := "Incomplete arguments provided for the `/dtrack project sync` command. Please provide the identifier of the reference project & target project.\nExample: `/dtrack project sync --reference-project project1-id --target-project project2-id`"
 		return p.sendEphemeralResponse(args, msg), nil
 	}
-	return p.sendEphemeralResponse(args, "Project will be synced shortly."), nil
+
+	referenceProjectId := split[2]
+	targetProjectId := split[4]
+
+	// Check if config is valid
+	if err := p.getConfiguration().IsValid(); err != nil {
+		msg := "DependencyTrack Plugin configuration is incomplete/incorrect. Please ask a system administrator to check the plugin configuration before running this command."
+		return p.sendEphemeralResponse(args, msg), nil
+	}
+
+	// Check if Projects exists
+	referenceProject, err := p.fetchProject(referenceProjectId)
+	if err != nil || !referenceProject.Active {
+		msg := fmt.Sprintf("Reference Project Id not found or is inactive. Please recheck if the reference projec id %s is present and is active.", referenceProjectId)
+		return p.sendEphemeralResponse(args, msg), nil
+	}
+
+	targetProject, err := p.fetchProject(targetProjectId)
+	if err != nil || !targetProject.Active {
+		msg := fmt.Sprintf("Target Project Id not found or is inactive. Please recheck if the target project id %s is present and is active", targetProjectId)
+		return p.sendEphemeralResponse(args, msg), nil
+	}
+
+	// Fetch open findings from target Project
+	findings, err := p.fetchFindings(targetProjectId)
+	if err != nil {
+		msg := fmt.Sprintf("Something went wrong while performing the project sync command. Error: %s\n", err.Error())
+		return p.sendEphemeralResponse(args, msg), nil
+	}
+
+	errors := ""
+
+	// Update analysis of the open findings in the target Project
+	for _, finding := range findings {
+		analysis, err := p.fetchAnalysis(referenceProjectId, finding.Vulnerability.Id, finding.Component.Id)
+		if err != nil {
+			errors += fmt.Sprintf("- %s\n", err.Error())
+		}
+		if len(analysis.State) > 0 {
+			p.updateAnalysis(targetProject.Id, finding.Vulnerability.Id, finding.Component.Id, analysis)
+		}
+	}
+
+	if len(findings) > 0 {
+		msg := fmt.Sprintf("Findings in the project %s has been successfully synced with %s\n", targetProject.Name, referenceProject.Name)
+		if len(errors) > 0 {
+			msg += fmt.Sprintf("Few errors were found while syncing the findings: %s", errors)
+		}
+		return p.sendEphemeralResponse(args, msg), nil
+	} else {
+		msg := fmt.Sprintf("There were no open findings foumd in the target project %s. No sync actions were performed.", targetProject.Name)
+		return p.sendEphemeralResponse(args, msg), nil
+	}
+
+}
+
+func (p *Plugin) autocompleteProjects(w http.ResponseWriter, r *http.Request) {
+	// Check if user is allowed to perform
+	userID := r.Header.Get("Mattermost-User-Id")
+	isAllowed, err := p.IsAuthorized(userID)
+	if err != nil {
+		p.API.LogError("Error while checking for isAuthorized in autocompleting projects", err)
+		http.NotFound(w, r)
+	}
+	if !isAllowed {
+		http.NotFound(w, r)
+	}
+
+	// Fetch Projects
+	projects, err := p.fetchProjects()
+	if err != nil {
+		p.respondAndLogErr(w, http.StatusInternalServerError, err)
+		return
+	}
+
+	out := []model.AutocompleteListItem{
+		{
+			HelpText: "Manually type the project identifier",
+			Item:     "<project_id>",
+		},
+	}
+	if len(projects) == 0 {
+		p.respondJSON(w, out)
+		return
+	}
+
+	for _, project := range projects {
+		out = append(out, model.AutocompleteListItem{
+			HelpText: project.Name,
+			Item:     project.Id,
+		})
+	}
+	p.respondJSON(w, out)
 }

@@ -172,18 +172,19 @@ func (p *Plugin) httpHandleWebhook(w http.ResponseWriter, r *http.Request) {
 		p.API.LogError("Unable to get project reference", "err", err)
 	}
 
+	// Check status of vulnerability with reference project. If an analysis was found, update the status of affected Projects accordingly
 	if len(referenceProject) > 0 && wi.Notification.Group == "NEW_VULNERABILITY" {
 		analysis, err := p.fetchAnalysis(referenceProject, wi.Notification.Subject.Vulnerability.Id, wi.Notification.Subject.Component.Id)
+
 		if err != nil {
 			p.API.LogError("Unable to fetch Analysis for the default project", "err", err)
 		}
+
 		if len(analysis.State) > 0 {
 
 			// Update the status of the finding accordingly and suppress if previously suppressed.
 			for _, project := range wi.Notification.Subject.Projects {
 				if project.Id != referenceProject {
-
-					//TODO: Check the status of the finding for each project before updating the analysis
 					p.updateAnalysis(project.Id, wi.Notification.Subject.Vulnerability.Id, wi.Notification.Subject.Component.Id, analysis)
 				}
 			}

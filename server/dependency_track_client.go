@@ -63,9 +63,13 @@ type Projects struct {
 	Projects []Project `json:"data"`
 }
 type Project struct {
-	Id      string `json:"uuid"`
-	Name    string `json:"name"`
-	Version string `json:"version"`
+	Id                     string  `json:"uuid"`
+	Name                   string  `json:"name"`
+	Version                string  `json:"version"`
+	LastBomImport          int64   `json:"lastBomImport,omitempty"`
+	LastBomImportFormat    string  `json:"lastBomImportFormat,omitempty"`
+	LastInheritedRiskScore float32 `json:"lastInheritedRiskScore,omitempty"`
+	Active                 bool    `json:"active,omitempty"`
 }
 
 type Analysis struct {
@@ -125,13 +129,13 @@ func (p *Plugin) fetchProjects() ([]Project, error) {
 	projectsEndpoint := fmt.Sprintf("%s?excludeInactive=true&searchText=&sortOrder=asc&pageSize=20&pageNumber=1", projectPath)
 	resp, err := p.doHTTPRequest(http.MethodGet, projectsEndpoint, nil)
 	if err != nil {
-		p.API.LogWarn("Something went wrong while getting the projects from DependencyTrack Tool", "error", err.Error())
+		p.API.LogError("Something went wrong while getting the projects from DependencyTrack Tool", "error", err.Error())
 		return nil, err
 	}
 	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
-		p.API.LogWarn("Something went wrong while getting the projects from DependencyTrack Tool", "error", err.Error())
+		p.API.LogError("Something went wrong while getting the projects from DependencyTrack Tool", "error", err.Error())
 		return nil, err
 	}
 
@@ -142,7 +146,7 @@ func (p *Plugin) fetchProjects() ([]Project, error) {
 	var response []Project
 	decoder := json.NewDecoder(resp.Body)
 	if err = decoder.Decode(&response); err != nil {
-		p.API.LogWarn("Something went wrong while getting the projects from DependencyTrack Tool", "error", err.Error())
+		p.API.LogError("Something went wrong while getting the projects from DependencyTrack Tool", "error", err.Error())
 		return nil, err
 	}
 	return response, err
@@ -152,13 +156,13 @@ func (p *Plugin) fetchAnalysis(projectId string, vulnUid string, componentUid st
 	analysisEndpoint := fmt.Sprintf("%s?project=%s&component=%s&vulnerability=%s", analysisPath, projectId, componentUid, vulnUid)
 	resp, err := p.doHTTPRequest(http.MethodGet, analysisEndpoint, nil)
 	if err != nil {
-		p.API.LogWarn("Something went wrong while getting the analysis from DependencyTrack Tool", "error", err.Error())
+		p.API.LogError("Something went wrong while getting the analysis from DependencyTrack Tool", "error", err.Error())
 		return FindingAnalysis{}, err
 	}
 	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
-		p.API.LogWarn("Something went wrong while getting the analysis from DependencyTrack Tool", "error", err.Error())
+		p.API.LogError("Something went wrong while getting the analysis from DependencyTrack Tool", "error", err.Error())
 		return FindingAnalysis{}, err
 	}
 
@@ -170,7 +174,7 @@ func (p *Plugin) fetchAnalysis(projectId string, vulnUid string, componentUid st
 	var response FindingAnalysis
 	decoder := json.NewDecoder(resp.Body)
 	if err = decoder.Decode(&response); err != nil {
-		p.API.LogWarn("Something went wrong while getting the analysis from DependencyTrack Tool", "error", err.Error())
+		p.API.LogError("Something went wrong while getting the analysis from DependencyTrack Tool", "error", err.Error())
 		return FindingAnalysis{}, err
 	}
 	return response, err
@@ -195,7 +199,7 @@ func (p *Plugin) updateAnalysis(projectId string, vulnUid string, componentUid s
 	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
-		p.API.LogWarn("Something went wrong while updating the analysis in the DependencyTrack Tool", "error", err.Error())
+		p.API.LogError("Something went wrong while updating the analysis in the DependencyTrack Tool", "error", err.Error())
 		return err
 	}
 
@@ -203,13 +207,46 @@ func (p *Plugin) updateAnalysis(projectId string, vulnUid string, componentUid s
 }
 
 func (p *Plugin) fetchProject(projectId string) (Project, error) {
-	return Project{}, nil
+	projectEndpoint := fmt.Sprintf("%s/%s", projectPath, projectId)
+	resp, err := p.doHTTPRequest(http.MethodGet, projectEndpoint, nil)
+	if err != nil {
+		p.API.LogError("Something went wrong while getting the project from DependencyTrack Tool", "error", err.Error())
+		return Project{}, err
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != http.StatusOK {
+		p.API.LogError("Something went wrong while getting the project from DependencyTrack Tool", "error", err.Error())
+		return Project{}, err
+	}
+
+	var response Project
+	decoder := json.NewDecoder(resp.Body)
+	if err = decoder.Decode(&response); err != nil {
+		p.API.LogError("Something went wrong while getting the project from DependencyTrack Tool", "error", err.Error())
+		return Project{}, err
+	}
+	return response, err
 }
 
 func (p *Plugin) fetchFindings(projectId string) ([]Finding, error) {
-	return nil, nil
-}
+	findingsEndpoint := fmt.Sprintf("%s/%s?suppressed=false&searchText=&sortOrder=asc", findingPath, projectId)
+	resp, err := p.doHTTPRequest(http.MethodGet, findingsEndpoint, nil)
+	if err != nil {
+		p.API.LogError("Something went wrong while getting the analysis from DependencyTrack Tool", "error", err.Error())
+		return nil, err
+	}
+	defer func() { _ = resp.Body.Close() }()
 
-func (p *Plugin) fetchFinding(projectId string, vulnId string) (Finding, error) {
-	return Finding{}, nil
+	if resp.StatusCode != http.StatusOK {
+		p.API.LogError("Something went wrong while getting the analysis from DependencyTrack Tool", "error", err.Error())
+		return nil, err
+	}
+	var response []Finding
+	decoder := json.NewDecoder(resp.Body)
+	if err = decoder.Decode(&response); err != nil {
+		p.API.LogError("Something went wrong while getting the findings from DependencyTrack Tool", "error", err.Error())
+		return nil, err
+	}
+	return response, err
 }

@@ -114,7 +114,8 @@ func getAutocompleteData(config *configuration) *model.AutocompleteData {
 
 	projectReference := model.NewAutocompleteData("reference", "", "This option is provided to consider the analysis for vulnerabilities for one project in reference to all the other projects.")
 
-	projectReferenceAdd := model.NewAutocompleteData("add", "<project_id>", "Enter the Project ID")
+	projectReferenceAdd := model.NewAutocompleteData("add", "<project>", "Enter the Project ID")
+	projectReferenceAdd.AddNamedDynamicListArgument("project", "The Project Identifier", routeAutocomplete+subrouteProjects, true)
 	projectReference.AddCommand(projectReferenceAdd)
 
 	projectReferenceList := model.NewAutocompleteData("list", "", "List the reference project set")
@@ -125,7 +126,10 @@ func getAutocompleteData(config *configuration) *model.AutocompleteData {
 
 	project.AddCommand(projectReference)
 
-	projectSync := model.NewAutocompleteData("sync", "[reference_project_id, target_project_id]", "This command will check the status of all alerts from the reference_project_id and update the same to the target_project_id")
+	projectSync := model.NewAutocompleteData("sync", "--reference-project project1 --target-project project2", "This command will check the status of all alerts from the reference_project_id and update the same to the target_project_id")
+	projectSync.AddNamedDynamicListArgument("reference-project", "Reference Project Identifier", routeAutocomplete+subrouteProjects, true)
+	projectSync.AddNamedDynamicListArgument("target-project", "Target Project Identifier", routeAutocomplete+subrouteProjects, true)
+
 	project.AddCommand(projectSync)
 
 	dtrack.AddCommand(project)

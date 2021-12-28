@@ -1,11 +1,14 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
+	"net/http"
 	"strings"
 	"time"
 
 	"github.com/mattermost/mattermost-server/v5/model"
+	"github.com/pkg/errors"
 )
 
 // Plugin utils
@@ -62,4 +65,26 @@ func (p *Plugin) getWebhookURL() string {
 	siteURL = strings.TrimRight(siteURL, "/")
 	webhookSecret := p.getConfiguration().WebhooksSecret
 	return fmt.Sprintf("%s/plugins/%s%s/%s", siteURL, dtrackPluginId, routeWebhooks, webhookSecret)
+}
+
+func (p *Plugin) respondAndLogErr(w http.ResponseWriter, code int, err error) {
+	http.Error(w, err.Error(), code)
+	p.API.LogError(err.Error())
+}
+
+func (p *Plugin) respondJSON(w http.ResponseWriter, obj interface{}) {
+	data, err := json.Marshal(obj)
+	if err != nil {
+		p.respondAndLogErr(w, http.StatusInternalServerError, errors.WithMessage(err, "failed to marshal response"))
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	_, err = w.Write(data)
+	if err != nil {
+		p.respondAndLogErr(w, http.StatusInternalServerError, errors.WithMessage(err, "failed to write response"))
+		return
+	}
+
+	w.WriteHeader(http.StatusOK)
 }
