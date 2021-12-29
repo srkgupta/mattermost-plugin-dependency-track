@@ -67,6 +67,18 @@ func (p *Plugin) getWebhookURL() string {
 	return fmt.Sprintf("%s/plugins/%s%s/%s", siteURL, dtrackPluginId, routeWebhooks, webhookSecret)
 }
 
+func (p *Plugin) ensureAuthorized(w http.ResponseWriter, r *http.Request) {
+	userID := r.Header.Get("Mattermost-User-Id")
+	isAllowed, err := p.IsAuthorized(userID)
+	if err != nil {
+		p.API.LogError("Error while checking for isAuthorized in autocompleting projects", err)
+		http.NotFound(w, r)
+	}
+	if !isAllowed {
+		http.NotFound(w, r)
+	}
+}
+
 func (p *Plugin) respondAndLogErr(w http.ResponseWriter, code int, err error) {
 	http.Error(w, err.Error(), code)
 	p.API.LogError(err.Error())

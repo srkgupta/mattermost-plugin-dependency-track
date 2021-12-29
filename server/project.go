@@ -171,15 +171,7 @@ func (p *Plugin) handleProjectSync(args *model.CommandArgs, split []string) (*mo
 
 func (p *Plugin) autocompleteProjects(w http.ResponseWriter, r *http.Request) {
 	// Check if user is allowed to perform
-	userID := r.Header.Get("Mattermost-User-Id")
-	isAllowed, err := p.IsAuthorized(userID)
-	if err != nil {
-		p.API.LogError("Error while checking for isAuthorized in autocompleting projects", err)
-		http.NotFound(w, r)
-	}
-	if !isAllowed {
-		http.NotFound(w, r)
-	}
+	p.ensureAuthorized(w, r)
 
 	// Fetch Projects
 	projects, err := p.fetchProjects()

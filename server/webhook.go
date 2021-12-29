@@ -95,7 +95,7 @@ func (wi *WebhookInfo) ToPost() *model.Post {
 		fields = append(fields, &model.SlackAttachmentField{
 			Title: "Affected Projects",
 			Value: affectedProjects,
-			Short: true,
+			Short: false,
 		})
 		attachment.Color = wi.Notification.Subject.Vulnerability.ToColor()
 	}
@@ -140,6 +140,36 @@ func (wi *WebhookInfo) ToPost() *model.Post {
 	attachment.Fields = fields
 	attachment.Fallback = attachment.Title
 
+	if wi.Notification.Group == "NEW_VULNERABILITY" {
+		projectIds := make([]string, len(wi.Notification.Subject.Projects))
+
+		for i, project := range wi.Notification.Subject.Projects {
+			projectIds[i] = project.Id
+		}
+
+		attachment.Actions = []*model.PostAction{}
+		vulnActions := []string{"Exploitable", "False Positive", "Not Affected"}
+
+		for _, action := range vulnActions {
+			actionId := strings.ReplaceAll(action, " ", "")
+			attachment.Actions = append(attachment.Actions,
+				&model.PostAction{
+					Id:   "mark" + actionId,
+					Name: "Mark as " + action,
+					Type: model.POST_ACTION_TYPE_BUTTON,
+					Integration: &model.PostActionIntegration{
+						URL: fmt.Sprintf("/plugins/%s/%s", dtrackPluginId, routeUpdateVulnerability),
+						Context: map[string]interface{}{
+							"ComponentId":     wi.Notification.Subject.Component.Id,
+							"VulnerabilityId": wi.Notification.Subject.Vulnerability.Id,
+							"ProjectIds":      projectIds,
+							"Action":          action,
+						},
+					},
+				},
+			)
+		}
+	}
 	post := model.Post{
 		Message: message,
 	}
