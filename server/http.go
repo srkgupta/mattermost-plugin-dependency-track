@@ -67,6 +67,8 @@ func (p *Plugin) httpHandleUpdateVulnerability(w http.ResponseWriter, r *http.Re
 	vulnActions := []string{"Exploitable", "False Positive", "Not Affected", "New"}
 
 	// Get Context info
+	p.API.LogError("Request Data Context", requestData)
+	vulnerability := fmt.Sprintf("%s", requestData.Context["Vulnerability"])
 	action := fmt.Sprintf("%s", requestData.Context["Action"])
 	componentId := fmt.Sprintf("%s", requestData.Context["ComponentId"])
 	VulnerabilityId := fmt.Sprintf("%s", requestData.Context["VulnerabilityId"])
@@ -79,7 +81,6 @@ func (p *Plugin) httpHandleUpdateVulnerability(w http.ResponseWriter, r *http.Re
 
 	attachment := responsePost.Attachments()[0]
 	attachment.Actions = []*model.PostAction{}
-	replyPost := &model.Post{}
 
 	// Reset previous Status, Status Updated By & Suppressed By fields
 	newFields := []*model.SlackAttachmentField{}
@@ -112,6 +113,7 @@ func (p *Plugin) httpHandleUpdateVulnerability(w http.ResponseWriter, r *http.Re
 						"VulnerabilityId": VulnerabilityId,
 						"ProjectIds":      projectIds,
 						"Action":          "New",
+						"Vulnerability":   vulnerability,
 					},
 				},
 			},
@@ -145,6 +147,7 @@ func (p *Plugin) httpHandleUpdateVulnerability(w http.ResponseWriter, r *http.Re
 							"VulnerabilityId": VulnerabilityId,
 							"ProjectIds":      projectIds,
 							"Action":          "Suppress",
+							"Vulnerability":   vulnerability,
 						},
 					},
 				},
@@ -171,6 +174,7 @@ func (p *Plugin) httpHandleUpdateVulnerability(w http.ResponseWriter, r *http.Re
 								"VulnerabilityId": VulnerabilityId,
 								"ProjectIds":      projectIds,
 								"Action":          act,
+								"Vulnerability":   vulnerability,
 							},
 						},
 					},
@@ -178,12 +182,6 @@ func (p *Plugin) httpHandleUpdateVulnerability(w http.ResponseWriter, r *http.Re
 			}
 		} else {
 			attachment.Color = "#e61220" // red
-		}
-		replyPost = &model.Post{
-			UserId:    p.BotUserID,
-			ChannelId: requestData.ChannelId,
-			RootId:    requestData.PostId,
-			Message:   fmt.Sprintf("@%s updated the status as %s", user.Username, action),
 		}
 	}
 
@@ -194,20 +192,10 @@ func (p *Plugin) httpHandleUpdateVulnerability(w http.ResponseWriter, r *http.Re
 			Short: false,
 		})
 		attachment.Color = "#7d7a7b" // grey
-		replyPost = &model.Post{
-			UserId:    p.BotUserID,
-			ChannelId: requestData.ChannelId,
-			RootId:    requestData.PostId,
-			Message:   fmt.Sprintf("@%s suppressed this vulnerability", user.Username),
-		}
 	}
-
 	responsePost.AddProp("attachments", []*model.SlackAttachment{
 		attachment,
 	})
 
 	p.API.UpdatePost(responsePost)
-	if replyPost.Message != "" {
-		p.API.CreatePost(replyPost)
-	}
 }

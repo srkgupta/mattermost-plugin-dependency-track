@@ -89,7 +89,7 @@ func (wi *WebhookInfo) ToPost() *model.Post {
 		affectedProjects := ""
 
 		for _, project := range wi.Notification.Subject.Projects {
-			affectedProjects += fmt.Sprintf("[%s](%s)\n", project.Name, project.ToMarkdown(wi.DependencyTrackUrl))
+			affectedProjects += fmt.Sprintf("%s\n", project.ToMarkdown(wi.DependencyTrackUrl))
 		}
 
 		fields = append(fields, &model.SlackAttachmentField{
@@ -162,6 +162,7 @@ func (wi *WebhookInfo) ToPost() *model.Post {
 						Context: map[string]interface{}{
 							"ComponentId":     wi.Notification.Subject.Component.Id,
 							"VulnerabilityId": wi.Notification.Subject.Vulnerability.Id,
+							"Vulnerability":   wi.Notification.Subject.Vulnerability.VulnId,
 							"ProjectIds":      projectIds,
 							"Action":          action,
 						},
@@ -176,6 +177,74 @@ func (wi *WebhookInfo) ToPost() *model.Post {
 
 	post.AddProp("attachments", []*model.SlackAttachment{
 		attachment,
+	})
+
+	return &post
+}
+
+func (wi *WebhookInfo) vulnPost(vuln Vulnerability) *model.Post {
+	message := ""
+	projectIds := make([]string, 1)
+	projectIds[0] = wi.Notification.Subject.Project.Id
+	vulnAttachment := &model.SlackAttachment{
+		Title: vuln.ToMarkdown(),
+		Text:  vuln.Description,
+		Color: vuln.ToColor(),
+	}
+	vulnFields := []*model.SlackAttachmentField{}
+	vulnFields = append(vulnFields, &model.SlackAttachmentField{
+		Title: "Severity",
+		Value: vuln.Severity,
+		Short: true,
+	})
+	vulnFields = append(vulnFields, &model.SlackAttachmentField{
+		Title: "Source",
+		Value: vuln.Source,
+		Short: true,
+	})
+	vulnFields = append(vulnFields, &model.SlackAttachmentField{
+		Title: "CVSS Score",
+		Value: fmt.Sprintf("%.1f", vuln.Cvss),
+		Short: true,
+	})
+	if vuln.Cwe.Name != "" {
+		vulnFields = append(vulnFields, &model.SlackAttachmentField{
+			Title: "Vuln Type",
+			Value: vuln.Cwe.Name,
+			Short: true,
+		})
+	}
+	vulnAttachment.Fields = vulnFields
+	vulnAttachment.Actions = []*model.PostAction{}
+	vulnActions := []string{"Exploitable", "False Positive", "Not Affected"}
+
+	for _, action := range vulnActions {
+		actionId := strings.ReplaceAll(action, " ", "")
+		vulnAttachment.Actions = append(vulnAttachment.Actions,
+			&model.PostAction{
+				Id:   "mark" + actionId,
+				Name: "Mark as " + action,
+				Type: model.POST_ACTION_TYPE_BUTTON,
+				Integration: &model.PostActionIntegration{
+					URL: fmt.Sprintf("/plugins/%s/%s", dtrackPluginId, routeUpdateVulnerability),
+					Context: map[string]interface{}{
+						"ComponentId":     wi.Notification.Subject.Component.Id,
+						"VulnerabilityId": vuln.Id,
+						"ProjectIds":      projectIds,
+						"Action":          action,
+						"Vulnerability":   vuln.VulnId,
+					},
+				},
+			},
+		)
+	}
+
+	post := model.Post{
+		Message: message,
+	}
+
+	post.AddProp("attachments", []*model.SlackAttachment{
+		vulnAttachment,
 	})
 
 	return &post
@@ -233,8 +302,24 @@ func (p *Plugin) httpHandleWebhook(w http.ResponseWriter, r *http.Request) {
 	for _, sub := range allSubs {
 		post := postWithoutChannel.Clone()
 		post.ChannelId = sub.ChannelID
-		if _, appErr := p.API.CreatePost(post); appErr != nil {
+		createdPost, appErr := p.API.CreatePost(post)
+		if appErr != nil {
 			p.API.LogError("Failed to create Post", "appError", appErr)
+		}
+
+		if wi.Notification.Group == "NEW_VULNERABLE_DEPENDENCY" {
+			// Add a Reply Post for each vulnerability and provide options
+			for _, vuln := range wi.Notification.Subject.Vulnerabilities {
+				vulnPost := wi.vulnPost(vuln)
+				vulnPost.UserId = p.BotUserID
+				vulnPost.ChannelId = createdPost.ChannelId
+				vulnPost.RootId = createdPost.Id
+
+				if _, appErr := p.API.CreatePost(vulnPost); appErr != nil {
+					p.API.LogError("Failed to create reply Post", "appError", appErr)
+				}
+
+			}
 		}
 	}
 }
