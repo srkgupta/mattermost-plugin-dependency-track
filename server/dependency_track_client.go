@@ -11,6 +11,7 @@ import (
 )
 
 const (
+	configPath   = "/static/config.json"
 	apiPath      = "/api/v1/"
 	projectPath  = "project"
 	findingPath  = "finding/project"
@@ -102,9 +103,19 @@ type Finding struct {
 	Vulnerability Vulnerability
 }
 
+type DependencyTrackConfig struct {
+	ApiBaseUrl string `json:"api_base_url"`
+}
+
 func (p *Plugin) doHTTPRequest(method string, path string, body io.Reader) (*http.Response, error) {
 	bearer := p.getConfiguration().DependencyTrackApiKey
-	url := p.getConfiguration().DependencyTrackUrl + apiPath + path
+	apiBaseUrl := p.getConfiguration().DependencyTrackApiUrl
+	url := apiBaseUrl + apiPath + path
+
+	if len(bearer) < 1 || len(apiBaseUrl) < 1 {
+		return nil, errors.New("Invalid DependencyTrack config.")
+	}
+
 	p.API.LogDebug("Making HTTP request to DependencyTrack API:", url)
 	req, err := http.NewRequest(method, url, body)
 	req.Header.Set("Content-Type", "application/json")
@@ -181,10 +192,14 @@ func (p *Plugin) fetchAnalysis(projectId string, vulnUid string, componentUid st
 }
 
 func (p *Plugin) updateAnalysis(projectId string, vulnUid string, componentUid string, analysis FindingAnalysis) error {
-	prevComment := analysis.Comments[len(analysis.Comments)-1]
-	comment := fmt.Sprintf("Suppressed automatically by the Mattermost DependencyTrack Plugin. Reference comment: %s", prevComment)
+	comment := "Status updated automatically by the Mattermost DependencyTrack Plugin."
+
+	if analysis.Suppressed {
+		comment = "Suppressed by the Mattermost DependencyTrack Plugin."
+	}
 	newAnalysis := Analysis{
 		Suppressed:      analysis.Suppressed,
+		State:           analysis.State,
 		ProjectId:       projectId,
 		ComponentId:     componentUid,
 		VulnerabilityId: vulnUid,
@@ -196,6 +211,9 @@ func (p *Plugin) updateAnalysis(projectId string, vulnUid string, componentUid s
 		return fmt.Errorf("json.Marshal error while updating analysis: %w", err)
 	}
 	resp, err := p.doHTTPRequest(http.MethodPut, analysisPath, bytes.NewReader(b))
+	if err != nil {
+		return err
+	}
 	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
@@ -247,6 +265,28 @@ func (p *Plugin) fetchFindings(projectId string) ([]Finding, error) {
 	if err = decoder.Decode(&response); err != nil {
 		p.API.LogError("Something went wrong while getting the findings from DependencyTrack Tool", "error", err.Error())
 		return nil, err
+	}
+	return response, err
+}
+
+func (p *Plugin) fetchConfig() (DependencyTrackConfig, error) {
+	resp, err := p.doHTTPRequest(http.MethodGet, configPath, nil)
+	if err != nil {
+		p.API.LogError("Something went wrong while getting the config from DependencyTrack Tool", "error", err.Error())
+		return DependencyTrackConfig{}, err
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != http.StatusOK {
+		p.API.LogError("Something went wrong while getting the config from DependencyTrack Tool", "error", err.Error())
+		return DependencyTrackConfig{}, err
+	}
+
+	var response DependencyTrackConfig
+	decoder := json.NewDecoder(resp.Body)
+	if err = decoder.Decode(&response); err != nil {
+		p.API.LogError("Something went wrong while getting the config from DependencyTrack Tool", "error", err.Error())
+		return DependencyTrackConfig{}, err
 	}
 	return response, err
 }

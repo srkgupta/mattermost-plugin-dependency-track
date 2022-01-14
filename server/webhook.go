@@ -163,7 +163,7 @@ func (wi *WebhookInfo) ToPost() *model.Post {
 							"ComponentId":     wi.Notification.Subject.Component.Id,
 							"VulnerabilityId": wi.Notification.Subject.Vulnerability.Id,
 							"Vulnerability":   wi.Notification.Subject.Vulnerability.VulnId,
-							"ProjectIds":      projectIds,
+							"ProjectIds":      strings.Join(projectIds, ","),
 							"Action":          action,
 						},
 					},
@@ -230,7 +230,7 @@ func (wi *WebhookInfo) vulnPost(vuln Vulnerability) *model.Post {
 					Context: map[string]interface{}{
 						"ComponentId":     wi.Notification.Subject.Component.Id,
 						"VulnerabilityId": vuln.Id,
-						"ProjectIds":      projectIds,
+						"ProjectIds":      strings.Join(projectIds, ","),
 						"Action":          action,
 						"Vulnerability":   vuln.VulnId,
 					},
@@ -276,7 +276,7 @@ func (p *Plugin) httpHandleWebhook(w http.ResponseWriter, r *http.Request) {
 		analysis, err := p.fetchAnalysis(referenceProject, wi.Notification.Subject.Vulnerability.Id, wi.Notification.Subject.Component.Id)
 
 		if err != nil {
-			p.API.LogError("Unable to fetch Analysis for the default project", "err", err)
+			p.API.LogDebug("Unable to fetch Analysis for the default project", "err", err)
 		}
 
 		if len(analysis.State) > 0 {

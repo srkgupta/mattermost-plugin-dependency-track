@@ -73,6 +73,7 @@ func (p *Plugin) httpHandleUpdateVulnerability(w http.ResponseWriter, r *http.Re
 	componentId := fmt.Sprintf("%s", requestData.Context["ComponentId"])
 	VulnerabilityId := fmt.Sprintf("%s", requestData.Context["VulnerabilityId"])
 	projectIds := fmt.Sprintf("%v", requestData.Context["ProjectIds"])
+	projectIdsArr := strings.Split(projectIds, ",")
 
 	// Check if action is in one of the allowed list
 	if !contains(vulnActions, action) && action != "Suppress" {
@@ -197,5 +198,45 @@ func (p *Plugin) httpHandleUpdateVulnerability(w http.ResponseWriter, r *http.Re
 		attachment,
 	})
 
-	p.API.UpdatePost(responsePost)
+	// Update DependencyTrack tool
+	errorMessages := ""
+	analysis := p.ActionToAnalysis(action)
+	for _, projectId := range projectIdsArr {
+		err := p.updateAnalysis(projectId, VulnerabilityId, componentId, analysis)
+		if err != nil {
+			errorMessages += fmt.Sprintf("%s\n", err.Error())
+			p.API.LogError("Something went wrong while updating the analysis status in the DependencyTrack Tool", "error", err.Error())
+		}
+	}
+
+	if len(errorMessages) > 1 {
+		message := fmt.Sprintf("Something went wrong while updating the analysis in the DependencyTrack Tool: %s", errorMessages)
+		errPost := &model.Post{
+			UserId:    p.BotUserID,
+			ChannelId: responsePost.ChannelId,
+			Message:   message,
+		}
+		p.API.SendEphemeralPost(userID, errPost)
+	} else {
+		// Update Post if no errors
+		p.API.UpdatePost(responsePost)
+	}
+
+}
+
+func (p *Plugin) ActionToAnalysis(action string) FindingAnalysis {
+	analysis := FindingAnalysis{Suppressed: false}
+	switch action {
+	case "New":
+		analysis.State = "NOT_SET"
+	case "Exploitable":
+		analysis.State = "EXPLOITABLE"
+	case "False Positive":
+		analysis.State = "FALSE_POSITIVE"
+	case "Not Affected":
+		analysis.State = "NOT_AFFECTED"
+	case "Suppress":
+		analysis.Suppressed = true
+	}
+	return analysis
 }

@@ -22,6 +22,7 @@ type configuration struct {
 	DependencyTrackApiKey string
 	DependencyTrackUrl    string
 	WebhooksSecret        string
+	DependencyTrackApiUrl string
 }
 
 // Clone shallow copies the configuration. Your implementation may require a deep copy if
@@ -113,6 +114,17 @@ func (p *Plugin) OnConfigurationChange() error {
 	if err := config.IsValid(); err != nil {
 		return err
 	}
+
+	dtrackConfig, err := p.fetchConfig()
+	if err != nil {
+		return err
+	}
+
+	if len(dtrackConfig.ApiBaseUrl) < 1 {
+		return errors.New("failed to get API_BASE_URL from the configured DependencyTrack instance")
+	}
+
+	p.configuration.DependencyTrackApiUrl = dtrackConfig.ApiBaseUrl
 
 	p.API.LogInfo("Reloaded configuration")
 
