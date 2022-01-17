@@ -16,6 +16,7 @@ const (
 	projectPath  = "project"
 	findingPath  = "finding/project"
 	analysisPath = "analysis"
+	headerAPIKey = "X-API-Key"
 )
 
 type Notification struct {
@@ -75,7 +76,7 @@ type Project struct {
 
 type Analysis struct {
 	Suppressed      bool   `json:"suppressed"`
-	State           string `json:"state"`
+	State           string `json:"state,omitempty"`
 	ProjectId       string `json:"project"`
 	ComponentId     string `json:"component"`
 	VulnerabilityId string `json:"vulnerability"`
@@ -90,9 +91,8 @@ type FindingAnalysis struct {
 }
 
 type AnalysisComment struct {
-	Timestamp string
+	Timestamp int64
 	Comment   string
-	Commenter string
 }
 
 type Finding struct {
@@ -108,18 +108,18 @@ type DependencyTrackConfig struct {
 }
 
 func (p *Plugin) doHTTPRequest(method string, path string, body io.Reader) (*http.Response, error) {
-	bearer := p.getConfiguration().DependencyTrackApiKey
+	apiKey := p.getConfiguration().DependencyTrackApiKey
 	apiBaseUrl := p.getConfiguration().DependencyTrackApiUrl
 	url := apiBaseUrl + apiPath + path
 
-	if len(bearer) < 1 || len(apiBaseUrl) < 1 {
+	if len(apiKey) < 1 || len(apiBaseUrl) < 1 {
 		return nil, errors.New("Invalid DependencyTrack config.")
 	}
 
 	p.API.LogDebug("Making HTTP request to DependencyTrack API:", url)
 	req, err := http.NewRequest(method, url, body)
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Add("Authorization", fmt.Sprintf("Bearer: %s", bearer))
+	req.Header.Add(headerAPIKey, apiKey)
 	if err != nil {
 		return nil, errors.Wrap(err, "bad request for url:"+url)
 	}
@@ -131,7 +131,7 @@ func (p *Plugin) doHTTPRequest(method string, path string, body io.Reader) (*htt
 
 	if resp.StatusCode != http.StatusOK {
 		_ = resp.Body.Close()
-		return nil, errors.New("non-ok status code for url:" + url)
+		return nil, errors.New(fmt.Sprintf("non-ok %d status code for url: %s", resp.StatusCode, url))
 	}
 	return resp, err
 }
@@ -191,15 +191,15 @@ func (p *Plugin) fetchAnalysis(projectId string, vulnUid string, componentUid st
 	return response, err
 }
 
-func (p *Plugin) updateAnalysis(projectId string, vulnUid string, componentUid string, analysis FindingAnalysis) error {
-	comment := "Status updated automatically by the Mattermost DependencyTrack Plugin."
+func (p *Plugin) updateAnalysis(projectId string, vulnUid string, componentUid string, analysis FindingAnalysis, username string) error {
+	comment := fmt.Sprintf("Status updated by @%s using the Mattermost DependencyTrack Plugin.", username)
 
 	if analysis.Suppressed {
-		comment = "Suppressed by the Mattermost DependencyTrack Plugin."
+		comment = fmt.Sprintf("Suppressed by @%s using the Mattermost DependencyTrack Plugin.", username)
 	}
 	newAnalysis := Analysis{
 		Suppressed:      analysis.Suppressed,
-		State:           analysis.State,
+		AnalysisState:   analysis.State,
 		ProjectId:       projectId,
 		ComponentId:     componentUid,
 		VulnerabilityId: vulnUid,
@@ -210,6 +210,7 @@ func (p *Plugin) updateAnalysis(projectId string, vulnUid string, componentUid s
 	if err != nil {
 		return fmt.Errorf("json.Marshal error while updating analysis: %w", err)
 	}
+	p.API.LogDebug(fmt.Sprintf("Updating analysis with params: %s", string(b)))
 	resp, err := p.doHTTPRequest(http.MethodPut, analysisPath, bytes.NewReader(b))
 	if err != nil {
 		return err
@@ -270,11 +271,23 @@ func (p *Plugin) fetchFindings(projectId string) ([]Finding, error) {
 }
 
 func (p *Plugin) fetchConfig() (DependencyTrackConfig, error) {
-	resp, err := p.doHTTPRequest(http.MethodGet, configPath, nil)
+	url := fmt.Sprintf("%s/%s", p.getConfiguration().DependencyTrackUrl, configPath)
+	req, err := http.NewRequest(http.MethodGet, url, nil)
+	req.Header.Set("Content-Type", "application/json")
 	if err != nil {
-		p.API.LogError("Something went wrong while getting the config from DependencyTrack Tool", "error", err.Error())
-		return DependencyTrackConfig{}, err
+		return DependencyTrackConfig{}, errors.Wrap(err, "bad request for url:"+url)
 	}
+
+	resp, err := p.httpClient.Do(req)
+	if err != nil {
+		return DependencyTrackConfig{}, errors.Wrap(err, "connection problem for url:"+url)
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		_ = resp.Body.Close()
+		return DependencyTrackConfig{}, errors.Wrap(err, "non-ok status code for url:"+url)
+	}
+
 	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {

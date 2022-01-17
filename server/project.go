@@ -130,6 +130,13 @@ func (p *Plugin) handleProjectSync(args *model.CommandArgs, split []string) (*mo
 		return p.sendEphemeralResponse(args, msg), nil
 	}
 
+	// Check if user is found
+	user, err := p.API.GetUser(args.UserId)
+	if err != nil {
+		p.API.LogError("User not found", err)
+		return p.sendEphemeralResponse(args, "User not found or does not have permissions"), nil
+	}
+
 	targetProject, err := p.fetchProject(targetProjectId)
 	if err != nil || !targetProject.Active {
 		msg := fmt.Sprintf("Target Project Id not found or is inactive. Please recheck if the target project id %s is present and is active", targetProjectId)
@@ -152,7 +159,7 @@ func (p *Plugin) handleProjectSync(args *model.CommandArgs, split []string) (*mo
 			errors += fmt.Sprintf("- %s\n", err.Error())
 		}
 		if len(analysis.State) > 0 {
-			p.updateAnalysis(targetProject.Id, finding.Vulnerability.Id, finding.Component.Id, analysis)
+			p.updateAnalysis(targetProject.Id, finding.Vulnerability.Id, finding.Component.Id, analysis, user.Username)
 		}
 	}
 

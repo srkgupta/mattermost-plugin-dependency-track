@@ -67,7 +67,6 @@ func (p *Plugin) httpHandleUpdateVulnerability(w http.ResponseWriter, r *http.Re
 	vulnActions := []string{"Exploitable", "False Positive", "Not Affected", "New"}
 
 	// Get Context info
-	p.API.LogError("Request Data Context", requestData)
 	vulnerability := fmt.Sprintf("%s", requestData.Context["Vulnerability"])
 	action := fmt.Sprintf("%s", requestData.Context["Action"])
 	componentId := fmt.Sprintf("%s", requestData.Context["ComponentId"])
@@ -119,6 +118,9 @@ func (p *Plugin) httpHandleUpdateVulnerability(w http.ResponseWriter, r *http.Re
 				},
 			},
 		)
+		responsePost.Message = ":white_check_mark: Action Taken"
+	} else {
+		responsePost.Message = ""
 	}
 
 	// Update Status
@@ -202,7 +204,15 @@ func (p *Plugin) httpHandleUpdateVulnerability(w http.ResponseWriter, r *http.Re
 	errorMessages := ""
 	analysis := p.ActionToAnalysis(action)
 	for _, projectId := range projectIdsArr {
-		err := p.updateAnalysis(projectId, VulnerabilityId, componentId, analysis)
+		if action == "Suppress" {
+			prevAnalysis, err := p.fetchAnalysis(projectId, VulnerabilityId, componentId)
+			if err != nil {
+				errorMessages += fmt.Sprintf("Could not find previous analysis while suppressing it. Error: %s\n", err.Error())
+				p.API.LogError("Something went wrong while fetching the previous analysis status in the DependencyTrack Tool", "error", err.Error())
+			}
+			analysis.State = prevAnalysis.State
+		}
+		err := p.updateAnalysis(projectId, VulnerabilityId, componentId, analysis, user.Username)
 		if err != nil {
 			errorMessages += fmt.Sprintf("%s\n", err.Error())
 			p.API.LogError("Something went wrong while updating the analysis status in the DependencyTrack Tool", "error", err.Error())
@@ -210,13 +220,15 @@ func (p *Plugin) httpHandleUpdateVulnerability(w http.ResponseWriter, r *http.Re
 	}
 
 	if len(errorMessages) > 1 {
-		message := fmt.Sprintf("Something went wrong while updating the analysis in the DependencyTrack Tool: %s", errorMessages)
+		message := "Something went wrong while updating the analysis in the DependencyTrack Tool. Please check the logs for more information."
+		p.API.LogError(fmt.Sprintf("%s\n%s", message, errorMessages))
 		errPost := &model.Post{
 			UserId:    p.BotUserID,
 			ChannelId: responsePost.ChannelId,
 			Message:   message,
+			RootId:    responsePost.Id,
 		}
-		p.API.SendEphemeralPost(userID, errPost)
+		p.API.CreatePost(errPost)
 	} else {
 		// Update Post if no errors
 		p.API.UpdatePost(responsePost)

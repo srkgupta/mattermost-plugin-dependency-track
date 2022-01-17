@@ -284,7 +284,7 @@ func (p *Plugin) httpHandleWebhook(w http.ResponseWriter, r *http.Request) {
 			// Update the status of the finding accordingly and suppress if previously suppressed.
 			for _, project := range wi.Notification.Subject.Projects {
 				if project.Id != referenceProject {
-					p.updateAnalysis(project.Id, wi.Notification.Subject.Vulnerability.Id, wi.Notification.Subject.Component.Id, analysis)
+					p.updateAnalysis(project.Id, wi.Notification.Subject.Vulnerability.Id, wi.Notification.Subject.Component.Id, analysis, "dependencytrack")
 				}
 			}
 			return
