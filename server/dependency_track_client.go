@@ -15,97 +15,10 @@ const (
 	apiPath      = "/api/v1/"
 	projectPath  = "project"
 	findingPath  = "finding/project"
+	vulnPath     = "vulnerability"
 	analysisPath = "analysis"
 	headerAPIKey = "X-API-Key"
 )
-
-type Notification struct {
-	Level     string `json:"level"`
-	Scope     string `json:"scope"`
-	Group     string `json:"group"`
-	Timestamp string `json:"timestamp"`
-	Title     string `json:"title"`
-	Content   string `json:"content"`
-	Subject   struct {
-		Component       Component
-		Vulnerability   Vulnerability   `json:"vulnerability,omitempty"`
-		Vulnerabilities []Vulnerability `json:"vulnerabilities,omitempty"`
-		Project         Project         `json:"project,omitempty"`
-		Projects        []Project       `json:"affectedProjects,omitempty"`
-		Analysis        Analysis        `json:"analysis,omitempty"`
-	}
-}
-
-type Component struct {
-	Id         string `json:"uuid"`
-	Group      string `json:"group"`
-	Name       string `json:"name"`
-	Version    string `json:"version"`
-	Md5        string `json:"md5"`
-	Sha1       string `json:"sha1"`
-	Sha256     string `json:"sha256"`
-	PackageUrl string `json:"purl"`
-	ProjectId  string `json:"project,omitempty"`
-}
-
-type Vulnerability struct {
-	Id          string  `json:"uuid"`
-	VulnId      string  `json:"vulnId"`
-	Source      string  `json:"source"`
-	Description string  `json:"description"`
-	Cvss        float32 `json:"cvssv2"`
-	Severity    string  `json:"severity"`
-	Cwe         struct {
-		Id   int32  `json:"cweId"`
-		Name string `json:"name"`
-	}
-}
-
-type Projects struct {
-	Projects []Project `json:"data"`
-}
-type Project struct {
-	Id                     string  `json:"uuid"`
-	Name                   string  `json:"name"`
-	Version                string  `json:"version"`
-	LastBomImport          int64   `json:"lastBomImport,omitempty"`
-	LastBomImportFormat    string  `json:"lastBomImportFormat,omitempty"`
-	LastInheritedRiskScore float32 `json:"lastInheritedRiskScore,omitempty"`
-	Active                 bool    `json:"active,omitempty"`
-}
-
-type Analysis struct {
-	Suppressed      bool   `json:"suppressed"`
-	State           string `json:"state,omitempty"`
-	ProjectId       string `json:"project"`
-	ComponentId     string `json:"component"`
-	VulnerabilityId string `json:"vulnerability"`
-	Comment         string `json:"comment"`
-	AnalysisState   string `json:"analysisState"`
-}
-
-type FindingAnalysis struct {
-	Suppressed bool              `json:"isSuppressed"`
-	State      string            `json:"analysisState"`
-	Comments   []AnalysisComment `json:"analysisComments"`
-}
-
-type AnalysisComment struct {
-	Timestamp int64
-	Comment   string
-}
-
-type Finding struct {
-	Analysis struct {
-		Suppressed bool `json:"isSuppressed"`
-	}
-	Component     Component
-	Vulnerability Vulnerability
-}
-
-type DependencyTrackConfig struct {
-	ApiBaseUrl string `json:"api_base_url"`
-}
 
 func (p *Plugin) doHTTPRequest(method string, path string, body io.Reader) (*http.Response, error) {
 	apiKey := p.getConfiguration().DependencyTrackApiKey
@@ -172,11 +85,6 @@ func (p *Plugin) fetchAnalysis(projectId string, vulnUid string, componentUid st
 	}
 	defer func() { _ = resp.Body.Close() }()
 
-	if resp.StatusCode != http.StatusOK {
-		p.API.LogError("Something went wrong while getting the analysis from DependencyTrack Tool", "error", err.Error())
-		return FindingAnalysis{}, err
-	}
-
 	// If analysis is not found, then response will be empty
 	if resp.Body == nil {
 		return FindingAnalysis{}, nil
@@ -185,7 +93,9 @@ func (p *Plugin) fetchAnalysis(projectId string, vulnUid string, componentUid st
 	var response FindingAnalysis
 	decoder := json.NewDecoder(resp.Body)
 	if err = decoder.Decode(&response); err != nil {
-		p.API.LogError("Something went wrong while getting the analysis from DependencyTrack Tool", "error", err.Error())
+		if err != io.EOF {
+			p.API.LogError("Something went wrong while decoding the response of fetchAnalysis API from DependencyTrack Tool", "error", err.Error())
+		}
 		return FindingAnalysis{}, err
 	}
 	return response, err
@@ -302,4 +212,58 @@ func (p *Plugin) fetchConfig() (DependencyTrackConfig, error) {
 		return DependencyTrackConfig{}, err
 	}
 	return response, err
+}
+
+func (p *Plugin) fetchVulnerability(vulnerabilityId string) (Vulnerability, error) {
+	vulnEndpoint := fmt.Sprintf("%s/%s", vulnPath, vulnerabilityId)
+	resp, err := p.doHTTPRequest(http.MethodGet, vulnEndpoint, nil)
+	if err != nil {
+		p.API.LogError("Something went wrong while getting the vulnerability from DependencyTrack Tool", "error", err.Error())
+		return Vulnerability{}, err
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != http.StatusOK {
+		p.API.LogError("Something went wrong while getting the vulnerability from DependencyTrack Tool", "error", err.Error())
+		return Vulnerability{}, err
+	}
+	var response Vulnerability
+	decoder := json.NewDecoder(resp.Body)
+	if err = decoder.Decode(&response); err != nil {
+		p.API.LogError("Something went wrong while decoding the response while getting the vulnerability from DependencyTrack Tool", "error", err.Error())
+		return Vulnerability{}, err
+	}
+	return response, err
+}
+
+func (p *Plugin) findComponentIdForVulnerability(projectId string, source string, vulnId string) (string, error) {
+	vulnEndpoint := fmt.Sprintf("%s/source/%s/vuln/%s", vulnPath, source, vulnId)
+	resp, err := p.doHTTPRequest(http.MethodGet, vulnEndpoint, nil)
+	componentId := ""
+
+	if err != nil {
+		p.API.LogError("Something went wrong while finding the component Id for vulnerability from DependencyTrack Tool", "error", err.Error())
+		return componentId, err
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != http.StatusOK {
+		p.API.LogError("Something went wrong while finding the component Id for vulnerability from DependencyTrack Tool", "error", err.Error())
+		return componentId, err
+	}
+	var response VulnerabilitySource
+	decoder := json.NewDecoder(resp.Body)
+	if err = decoder.Decode(&response); err != nil {
+		p.API.LogError("Something went wrong while decoding json response while finding the component Id for vulnerability from DependencyTrack Tool", "error", err.Error())
+		return componentId, err
+	}
+
+	for _, component := range response.Components {
+		if projectId == component.Project.Id {
+			componentId = component.Id
+			break
+		}
+	}
+
+	return componentId, nil
 }

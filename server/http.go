@@ -204,18 +204,34 @@ func (p *Plugin) httpHandleUpdateVulnerability(w http.ResponseWriter, r *http.Re
 	errorMessages := ""
 	analysis := p.ActionToAnalysis(action)
 	for _, projectId := range projectIdsArr {
-		if action == "Suppress" {
-			prevAnalysis, err := p.fetchAnalysis(projectId, VulnerabilityId, componentId)
-			if err != nil {
-				errorMessages += fmt.Sprintf("Could not find previous analysis while suppressing it. Error: %s\n", err.Error())
-				p.API.LogError("Something went wrong while fetching the previous analysis status in the DependencyTrack Tool", "error", err.Error())
-			}
-			analysis.State = prevAnalysis.State
-		}
-		err := p.updateAnalysis(projectId, VulnerabilityId, componentId, analysis, user.Username)
+		vulnerability, err := p.fetchVulnerability(VulnerabilityId)
 		if err != nil {
-			errorMessages += fmt.Sprintf("%s\n", err.Error())
-			p.API.LogError("Something went wrong while updating the analysis status in the DependencyTrack Tool", "error", err.Error())
+			errorMessages += fmt.Sprintf("Could not find vulnerability details. Error: %s\n", err.Error())
+			p.API.LogError("Something went wrong while fetching the vulnerability details in the DependencyTrack Tool", "error", err.Error())
+		}
+		if len(vulnerability.VulnId) > 0 {
+			vulnComponentId, err := p.findComponentIdForVulnerability(projectId, vulnerability.Source, vulnerability.VulnId)
+
+			if err != nil {
+				errorMessages += fmt.Sprintf("Could not find component details. Error: %s\n", err.Error())
+				p.API.LogError("Something went wrong while fetching the component details in the DependencyTrack Tool", "error", err.Error())
+			}
+
+			if len(vulnComponentId) > 0 {
+				if action == "Suppress" {
+					prevAnalysis, err := p.fetchAnalysis(projectId, VulnerabilityId, vulnComponentId)
+					if err != nil {
+						errorMessages += fmt.Sprintf("Could not find previous analysis while suppressing it. Error: %s\n", err.Error())
+						p.API.LogError("Something went wrong while fetching the previous analysis status in the DependencyTrack Tool", "error", err.Error())
+					}
+					analysis.State = prevAnalysis.State
+				}
+				err := p.updateAnalysis(projectId, VulnerabilityId, vulnComponentId, analysis, user.Username)
+				if err != nil {
+					errorMessages += fmt.Sprintf("%s\n", err.Error())
+					p.API.LogError("Something went wrong while updating the analysis status in the DependencyTrack Tool", "error", err.Error())
+				}
+			}
 		}
 	}
 

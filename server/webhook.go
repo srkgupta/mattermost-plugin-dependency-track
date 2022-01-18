@@ -273,22 +273,39 @@ func (p *Plugin) httpHandleWebhook(w http.ResponseWriter, r *http.Request) {
 
 	// Check status of vulnerability with reference project. If an analysis was found, update the status of affected Projects accordingly
 	if len(referenceProject) > 0 && wi.Notification.Group == "NEW_VULNERABILITY" {
-		analysis, err := p.fetchAnalysis(referenceProject, wi.Notification.Subject.Vulnerability.Id, wi.Notification.Subject.Component.Id)
+
+		//Find Component Id for reference Project and vuln id
+		componentId, err := p.findComponentIdForVulnerability(referenceProject, wi.Notification.Subject.Vulnerability.Source, wi.Notification.Subject.Vulnerability.VulnId)
 
 		if err != nil {
-			p.API.LogDebug("Unable to fetch Analysis for the default project", "err", err)
+			p.API.LogError("Unable to find component Id for reference project", "err", err)
 		}
-
-		if len(analysis.State) > 0 {
-
-			// Update the status of the finding accordingly and suppress if previously suppressed.
-			for _, project := range wi.Notification.Subject.Projects {
-				if project.Id != referenceProject {
-					p.updateAnalysis(project.Id, wi.Notification.Subject.Vulnerability.Id, wi.Notification.Subject.Component.Id, analysis, "dependencytrack")
-				}
+		if len(componentId) > 0 {
+			analysis, err := p.fetchAnalysis(referenceProject, wi.Notification.Subject.Vulnerability.Id, componentId)
+			if err != nil {
+				p.API.LogDebug("Unable to fetch Analysis for the default project", "err", err.Error())
 			}
-			return
+
+			if len(analysis.State) > 0 {
+
+				// Update the status of the finding accordingly and suppress if previously suppressed.
+				for _, project := range wi.Notification.Subject.Projects {
+					if project.Id != referenceProject {
+						vulnComponentId, err := p.findComponentIdForVulnerability(project.Id, wi.Notification.Subject.Vulnerability.Source, wi.Notification.Subject.Vulnerability.VulnId)
+
+						if err != nil {
+							p.API.LogError("Unable to find component Id while updating the status of the finding", "err", err)
+						}
+
+						if len(vulnComponentId) > 0 {
+							p.updateAnalysis(project.Id, wi.Notification.Subject.Vulnerability.Id, vulnComponentId, analysis, "dependencytrack")
+						}
+					}
+				}
+				return
+			}
 		}
+
 	}
 
 	allSubs, err := p.GetSubscriptions()

@@ -123,20 +123,17 @@ func (p *Plugin) handleProjectSync(args *model.CommandArgs, split []string) (*mo
 		return p.sendEphemeralResponse(args, msg), nil
 	}
 
-	// Check if Projects exists
+	// Check if Reference Projects exists
 	referenceProject, err := p.fetchProject(referenceProjectId)
 	if err != nil || !referenceProject.Active {
 		msg := fmt.Sprintf("Reference Project Id not found or is inactive. Please recheck if the reference projec id %s is present and is active.", referenceProjectId)
 		return p.sendEphemeralResponse(args, msg), nil
 	}
 
-	// Check if user is found
-	user, err := p.API.GetUser(args.UserId)
-	if err != nil {
-		p.API.LogError("User not found", err)
-		return p.sendEphemeralResponse(args, "User not found or does not have permissions"), nil
-	}
+	// Get User
+	user, _ := p.API.GetUser(args.UserId)
 
+	// Check if Target Projects exists
 	targetProject, err := p.fetchProject(targetProjectId)
 	if err != nil || !targetProject.Active {
 		msg := fmt.Sprintf("Target Project Id not found or is inactive. Please recheck if the target project id %s is present and is active", targetProjectId)
@@ -154,7 +151,13 @@ func (p *Plugin) handleProjectSync(args *model.CommandArgs, split []string) (*mo
 
 	// Update analysis of the open findings in the target Project
 	for _, finding := range findings {
-		analysis, err := p.fetchAnalysis(referenceProjectId, finding.Vulnerability.Id, finding.Component.Id)
+		vulnComponentId, err := p.findComponentIdForVulnerability(referenceProjectId, finding.Vulnerability.Source, finding.Vulnerability.VulnId)
+
+		if err != nil {
+			errors += fmt.Sprintf("Could not find component details. Error: %s\n", err.Error())
+		}
+
+		analysis, err := p.fetchAnalysis(referenceProjectId, finding.Vulnerability.Id, vulnComponentId)
 		if err != nil {
 			errors += fmt.Sprintf("- %s\n", err.Error())
 		}
@@ -166,7 +169,9 @@ func (p *Plugin) handleProjectSync(args *model.CommandArgs, split []string) (*mo
 	if len(findings) > 0 {
 		msg := fmt.Sprintf("Findings in the project %s has been successfully synced with %s\n", targetProject.Name, referenceProject.Name)
 		if len(errors) > 0 {
-			msg += fmt.Sprintf("Few errors were found while syncing the findings: %s", errors)
+			errorMsg := "Few errors were found while syncing the findings. Please check the logs for more information.\n"
+			msg += errorMsg
+			p.API.LogError(errorMsg + errors)
 		}
 		return p.sendEphemeralResponse(args, msg), nil
 	} else {
@@ -200,7 +205,7 @@ func (p *Plugin) autocompleteProjects(w http.ResponseWriter, r *http.Request) {
 
 	for _, project := range projects {
 		out = append(out, model.AutocompleteListItem{
-			HelpText: project.Name,
+			HelpText: fmt.Sprintf("%s %s", project.Name, project.Version),
 			Item:     project.Id,
 		})
 	}
