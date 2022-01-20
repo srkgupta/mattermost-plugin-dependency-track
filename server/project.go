@@ -99,7 +99,13 @@ func (p *Plugin) handleProjectReference(args *model.CommandArgs, split []string)
 			msg := fmt.Sprintf("Something went wrong while getting the project reference. Error: %s\n", err.Error())
 			return p.sendEphemeralResponse(args, msg), nil
 		}
-		msg = fmt.Sprintf("Reference Project: %s", id)
+		// Get Project Details
+		referenceProject, err := p.fetchProject(id)
+		if err != nil {
+			msg := fmt.Sprintf("Reference Project Id not found or is inactive. Please recheck if the reference project id %s is present.", id)
+			return p.sendEphemeralResponse(args, msg), nil
+		}
+		msg = fmt.Sprintf("Reference Project: %s", referenceProject.ToMarkdown(p.getConfiguration().DependencyTrackUrl))
 		if id == "" {
 			msg = "No Reference Project saved"
 		}
@@ -167,7 +173,7 @@ func (p *Plugin) handleProjectSync(args *model.CommandArgs, split []string) (*mo
 	}
 
 	if len(findings) > 0 {
-		msg := fmt.Sprintf("Findings in the project %s has been successfully synced with %s\n", targetProject.Name, referenceProject.Name)
+		msg := fmt.Sprintf("Findings in the project %s %s has been successfully synced with %s %s\n", targetProject.Name, targetProject.Version, referenceProject.Name, referenceProject.Version)
 		if len(errors) > 0 {
 			errorMsg := "Few errors were found while syncing the findings. Please check the logs for more information.\n"
 			msg += errorMsg

@@ -286,7 +286,7 @@ func (p *Plugin) httpHandleWebhook(w http.ResponseWriter, r *http.Request) {
 				p.API.LogDebug("Unable to fetch Analysis for the default project", "err", err.Error())
 			}
 
-			if len(analysis.State) > 0 {
+			if len(analysis.State) > 0 && analysis.State != "NOT_SET" {
 
 				// Update the status of the finding accordingly and suppress if previously suppressed.
 				for _, project := range wi.Notification.Subject.Projects {
