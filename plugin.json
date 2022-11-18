@@ -1,13 +1,13 @@
 {
-    "id": "com.mattermost.plugin-starter-template",
-    "name": "Plugin Starter Template",
-    "description": "This plugin serves as a starting point for writing a Mattermost plugin.",
-    "homepage_url": "https://github.com/mattermost/mattermost-plugin-starter-template",
-    "support_url": "https://github.com/mattermost/mattermost-plugin-starter-template/issues",
-    "release_notes_url": "https://github.com/mattermost/mattermost-plugin-starter-template/releases/tag/v0.1.0",
-    "icon_path": "assets/starter-template-icon.svg",
-    "version": "0.1.0",
-    "min_server_version": "5.37.0",
+    "id": "mattermost-plugin-dependency-track",
+    "name": "DependencyTrack Plugin",
+    "description": "DependencyTrack plugin for Mattermost.",
+    "homepage_url": "https://github.com/srkgupta/mattermost-plugin-dependency-track",
+    "support_url": "https://github.com/mattermost/mattermost-plugin-dependency-track/issues",
+    "release_notes_url": "https://github.com/mattermost/mattermost-plugin-dependency-track/releases/tag/v1.0.0",
+    "icon_path": "assets/icon.svg",
+    "version": "1.0.0",
+    "min_server_version": "5.12.0",
     "server": {
         "executables": {
             "linux-amd64": "server/dist/plugin-linux-amd64",
@@ -17,12 +17,31 @@
             "windows-amd64": "server/dist/plugin-windows-amd64.exe"
         }
     },
-    "webapp": {
-        "bundle_path": "webapp/dist/main.js"
-    },
     "settings_schema": {
-        "header": "",
-        "footer": "",
-        "settings": []
+        "header": "The DependencyTrack plugin for Mattermost allows users to subscribe to DependencyTrack notifications, stay up-to-date with all the alerts generated on the DependencyTrack tool, and other common DependencyTrack actions - directly from Mattermost. \n \n Instructions for setup are [available here](https://github.com/srkgupta/mattermost-plugin-dependency-track#configuration).",
+        "footer": "* To report an issue, make a suggestion or a contribution, [check the repository](https://github.com/srkgupta/mattermost-plugin-dependency-track).",
+        "settings": [
+            {
+                "key": "DependencyTrackUrl",
+                "display_name": "DependencyTrack URL:",
+                "type": "text",
+                "help_text": "URL of the DependencyTrack tool. ",
+                "placeholder": "Type the URL of the DependencyTrack tool"
+            },
+            {
+                "key": "DependencyTrackApiKey",
+                "display_name": "DependencyTrack API Token:",
+                "type": "text",
+                "help_text": "Type the DependencyTrack API Token here. [Instructions available here](https://docs.dependencytrack.org/integrations/rest-api/)",
+                "placeholder": "Paste the DependencyTrack API Token here"
+            },
+            {
+                "key": "WebhooksSecret",
+                "display_name": "Webhooks Secret",
+                "type": "generated",
+                "help_text": "The secret used to authenticate the dependencyTrack webhook to Mattermost",
+                "regenerate_help_text": "Regenerates the secret for the webhook URL endpoint. Regenerating the secret invalidates your existing DependencyTrack integrations"
+            }
+        ]
     }
 }

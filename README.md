@@ -1,138 +1,174 @@
-# Plugin Starter Template [![CircleCI branch](https://img.shields.io/circleci/project/github/mattermost/mattermost-plugin-starter-template/master.svg)](https://circleci.com/gh/mattermost/mattermost-plugin-starter-template)
+# Mattermost DependencyTrack Plugin
 
-This plugin serves as a starting point for writing a Mattermost plugin. Feel free to base your own plugin off this repository.
+**Maintainer**: [@srkgupta](https://github.com/srkgupta)
 
-To learn more about plugins, see [our plugin documentation](https://developers.mattermost.com/extend/plugins/).
+## About DependencyTrack tool
 
-## Getting Started
-Use GitHub's template feature to make a copy of this repository by clicking the "Use this template" button.
+The Dependency-Track tool from the website https://dependencytrack.org is an intelligent Component Analysis platform that allows organizations to identify and reduce risk in the software supply chain. Dependency-Track takes a unique and highly beneficial approach by leveraging the capabilities of Software Bill of Materials (SBOM). This approach provides capabilities that traditional Software Composition Analysis (SCA) solutions cannot achieve. Dependency-Track monitors component usage across all versions of every application in its portfolio in order to proactively identify risk across an organization. 
 
-Alternatively shallow clone the repository matching your plugin name:
-```
-git clone --depth 1 https://github.com/mattermost/mattermost-plugin-starter-template com.example.my-plugin
-```
+## About this plugin
 
-Note that this project uses [Go modules](https://github.com/golang/go/wiki/Modules). Be sure to locate the project outside of `$GOPATH`.
+This plugin allows you to perform following actions on Mattermost:
 
-Edit the following files:
-1. `plugin.json` with your `id`, `name`, and `description`:
-```
-{
-    "id": "com.example.my-plugin",
-    "name": "My Plugin",
-    "description": "A plugin to enhance Mattermost."
-}
-```
+* Receive different notifications like NEW_VULNERABILITY, NEW_VULNERABLE_DEPENDENCY, BOM_PROCESSED from the DependencyTrack tool.
+* Receive more context information for the notifications helping you analyze the alerts without having the need to visit the DependencyTrack tool. 
+* Analyze the different alerts and mark them as Exploitable, Not Affected, False Positive directly from Mattermost. 
+* An option is provided to consider the analysis for vulnerabilities for one project in reference to all the other projects.
+* Synchronize status of all alerts across different project. 
 
-2. `go.mod` with your Go module path, following the `<hosting-site>/<repository>/<module>` convention:
-```
-module github.com/example/my-plugin
-```
+Ultimately, this will make you or your team more productive and make the experience with the DependencyTrack tool much smoother.
 
-3. `.golangci.yml` with your Go module path:
-```yml
-linters-settings:
-  # [...]
-  goimports:
-    local-prefixes: github.com/example/my-plugin
-```
+### Screenshots
 
-Build your plugin:
-```
-make
-```
+#### Notification about a New Vulnerability from the DependencyTrack tool
 
-This will produce a single plugin file (with support for multiple architectures) for upload to your Mattermost server:
+![Screenshot of Notification about a New Vulnerability from the DependencyTrack tool](assets/screenshots/new_vulnerability.png)
 
-```
-dist/com.example.my-plugin.tar.gz
-```
+#### Notification about a New Vulnerable Dependency Introduced
 
-## Development
+![Screenshot of Notification about a New Vulnerable Dependency Introduced](assets/screenshots/vulnerable_dependency.png)
 
-To avoid having to manually install your plugin, build and deploy your plugin using one of the following options. In order for the below options to work, you must first enable plugin uploads via your config.json or API and restart Mattermost.
+#### Options to analyze the different vulnerabilities
 
-```json
-    "PluginSettings" : {
-        ...
-        "EnableUploads" : true
-    }
-```
+![Options to analyze the different vulnerabilities](assets/screenshots/analyze_options.png)
 
-### Deploying with Local Mode
+### Audience
 
-If your Mattermost server is running locally, you can enable [local mode](https://docs.mattermost.com/administration/mmctl-cli-tool.html#local-mode) to streamline deploying your plugin. Edit your server configuration as follows:
+This guide is for Mattermost System Admins setting up the DependencyTrack plugin and Mattermost users who want information about the plugin functionality.
 
-```json
-{
-    "ServiceSettings": {
-        ...
-        "EnableLocalMode": true,
-        "LocalModeSocketLocation": "/var/tmp/mattermost_local.socket"
-    },
-}
-```
+### Important notice
 
-and then deploy your plugin:
-```
-make deploy
-```
+* If you are a DependencyTrack admin/user and think there is something this plugin lacks or something that it does could be done the other way around, let us know!
+We are trying to develop this plugin based on users' needs.
+* If there is a certain feature you or your team needs, open up an issue, and explain your needs.
+We will be happy to help.
 
-You may also customize the Unix socket path:
-```
-export MM_LOCALSOCKETPATH=/var/tmp/alternate_local.socket
-make deploy
-```
+## Installing the plugin
 
-If developing a plugin with a webapp, watch for changes and deploy those automatically:
-```
-export MM_SERVICESETTINGS_SITEURL=http://localhost:8065
-export MM_ADMIN_TOKEN=j44acwd8obn78cdcx7koid4jkr
-make watch
-```
+1. Download the latest stable version of the plugin from the [releases page](https://github.com/mattermost/mattermost-plugin-dependency-track/releases)
+2. In Mattermost, go to **System Console → Plugins → Management**
+3. Upload the plugin in the **Upload Plugin** section
+4. Configure the plugin before you enable it :arrow_down:
 
-### Deploying with credentials
+## Configuring the plugin
 
-Alternatively, you can authenticate with the server's API with credentials:
-```
-export MM_SERVICESETTINGS_SITEURL=http://localhost:8065
-export MM_ADMIN_USERNAME=admin
-export MM_ADMIN_PASSWORD=password
-make deploy
-```
+1. In Mattermost, go to **System Console → Plugins → Management** and click *Enable* underneath the DependencyTrack plugin
+2. Click on *Settings* underneath the DependencyTrack plugin and update the DependencyTrack configurations as mentioned below:
+![Instructions](assets/screenshots/plugin_config.png)
+    * **DependencyTrack URL**
+        * URL of the DependencyTrack tool
+    * **DependencyTrack API Token**
+        * Please follow the instructions available at the following page to generate a API Token:
+        https://docs.dependencytrack.org/integrations/rest-api/
+        * Ensure that the `VULNERABILITY_ANALYSIS` permission is assigned. 
+    * **Webhooks Secret**
+        * The secret used to authenticate the dependencyTrack webhook to Mattermost.
+        * Click on the Regenerate button to generate a new and unique webhook secret. 
+        * Please note that regenerating the secret invalidates your existing DependencyTrack integrations
+3. Click *Save* to save the settings
+4. The plugin is now ready to use! :congratulations:
 
-or with a [personal access token](https://docs.mattermost.com/developer/personal-access-tokens.html):
-```
-export MM_SERVICESETTINGS_SITEURL=http://localhost:8065
-export MM_ADMIN_TOKEN=j44acwd8obn78cdcx7koid4jkr
-make deploy
-```
+## Updating the plugin
 
-## Q&A
+To update the plugin repeat the [Installing the plugin](https://github.com/mattermost/mattermost-plugin-dependency-track#installing-the-plugin) step.
 
-### How do I make a server-only or web app-only plugin?
+## Using the plugin
 
-Simply delete the `server` or `webapp` folders and remove the corresponding sections from `plugin.json`. The build scripts will skip the missing portions automatically.
+Interaction with the plugin involves using slash commands.
 
-### How do I include assets in the plugin bundle?
+### Slash commands overview
 
-Place them into the `assets` directory. To use an asset at runtime, build the path to your asset and open as a regular file:
+* `/dtrack`
+  * `subscriptions <list|add|delete>`
+  * `permissions <list|add|delete>`
+  * `project <reference/sync>`
 
-```go
-bundlePath, err := p.API.GetBundlePath()
-if err != nil {
-    return errors.Wrap(err, "failed to get bundle path")
-}
+### Slash commands documentation
+##### subscriptions
 
-profileImage, err := ioutil.ReadFile(filepath.Join(bundlePath, "assets", "profile_image.png"))
-if err != nil {
-    return errors.Wrap(err, "failed to read profile image")
-}
+`/dtrack subscriptions <list|add|delete>`
 
-if appErr := p.API.SetProfileImage(userID, profileImage); appErr != nil {
-    return errors.Wrap(err, "failed to set profile image")
-}
-```
+This action allows you to subscribe the current channel to receive DependencyTrack notifications. Once a channel is subscribed, the service will:
 
-### How do I build the plugin with unminified JavaScript?
-Setting the `MM_DEBUG` environment variable will invoke the debug builds. The simplist way to do this is to simply include this variable in your calls to `make` (e.g. `make dist MM_DEBUG=1`).
+* notify the subscribed channel whenever there are new alerts from the DependencyTrack tool.
+
+###### subscriptions add
+
+When executed, the current channel will be subscribed to receive notifications. This command will print the URL which should be configured as Outbound Webhooks URL in the DependencyTrack Tool. Once subscribed, the service will listen to any Webhook Events from the DependencyTrack tool and publish it on the subscribed channel.
+
+Remember to follow the instructions in the DependencyTrack tool for the notifications to work. 
+
+![Instructions](assets/screenshots/webhook_instructions.png)
+
+###### subscriptions list
+
+This action allows you to list all the channels which has been set to receive all the DependencyTrack notifications.
+
+###### subscriptions delete [index]
+
+This action allows you to delete the specified subscription and hence that specific channel will stop receiving any notifications for any events from DependencyTrack. You can run the command `/dtrack subscriptions list` to get the index position. Note: The index position starts with 1.
+
+##### permissions
+
+`/dtrack permissions <list|add|delete>`
+
+This action allows you to Access Control users who can run DependencyTrack slash commands. Note: By default, all system administrators can run the `/dtrack` slash commands.
+
+###### permissions add @username
+
+This action allows you to whitelist the user and allow them to run the DependencyTrack slash commands. For example: `/dtrack permissions add @user1`
+
+###### permissions delete @username
+
+This action allows you to delete the whitelisted user and prevent them from running the DependencyTrack slash commands. For example: `/dtrack permissions delete @user1`.
+
+###### permissions list
+
+This action allows you to list all the users who are allowed to run the DependencyTrack slash commands. Note: By default, all system administrators can run the `/dtrack` slash commands.
+
+##### project reference 
+
+`/dtrack project reference <add/list/delete>`
+
+By default, DependencyTrack tool does not carries out existing analysis done on different project. As a result, we have to redo all the analysis manually which might be time consuming and redundant. 
+
+Hence this option is provided to consider the analysis for vulnerabilities for one project in reference to all the other projects.
+
+###### project reference add 
+
+`/dtrack project reference add --project <project_id>`
+
+When executed, all the analysis done in the specified project_id will be considered in other projects. Hence the plugin will do the following tasks before triggerring a notification on the subscribed channels:
+
+- If Reference Project is configured, then the plugin will check the status of the triggered Vulnerability in the reference project_id and the package versions. 
+- If the status in the reference project was marked as exploitable, false positive (or) not affected, then the plugin will update the analysis status accordingly in the new project and will ignore and will not send any notification. 
+- If the status in the reference project was not set, only then the plugin will notify in the subscribed channels. 
+
+###### project reference list
+
+This action will list the reference project set. If no reference project was set, it will display an appropriate message. 
+
+###### project reference delete 
+
+This action will delete the reference project set. 
+
+
+##### project sync 
+
+`/dtrack project sync --reference-project <project_id> --target-project <project_id>`
+
+This command will check the status of all alerts from the reference_project_id and update the same to the target_project_id. 
+
+## Contributing
+
+<!-- TODO(amwolff): Write more about contributing to the plugin. Add CONTRIBUTING.md? -->
+
+This repository uses the [mattermost-plugin-starter-template](https://github.com/mattermost/mattermost-plugin-starter-template).
+Therefore, developing this plugin is roughly the same as it is with every plugin using the template.
+All the necessary steps to develop are in the template's repository.
+
+### Reporting security vulnerabilities
+
+You can report security vulnerabilities to @rohitesh.gupta at the [Community Server](https://community.mattermost.com/).
+Please adhere to the [Responsible Disclosure Policy](https://mattermost.com/security-vulnerability-report/).
+

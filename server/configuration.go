@@ -2,6 +2,7 @@ package main
 
 import (
 	"reflect"
+	"strings"
 
 	"github.com/pkg/errors"
 )
@@ -18,6 +19,10 @@ import (
 // If you add non-reference types to your configuration struct, be sure to rewrite Clone as a deep
 // copy appropriate for your types.
 type configuration struct {
+	DependencyTrackApiKey string
+	DependencyTrackUrl    string
+	WebhooksSecret        string
+	DependencyTrackApiUrl string
 }
 
 // Clone shallow copies the configuration. Your implementation may require a deep copy if
@@ -25,6 +30,20 @@ type configuration struct {
 func (c *configuration) Clone() *configuration {
 	var clone = *c
 	return &clone
+}
+
+// IsValid checks if all needed fields are set.
+func (c *configuration) IsValid() error {
+	if c.WebhooksSecret == "" {
+		return errors.New("please provide the Webhook Secret")
+	}
+	if c.DependencyTrackUrl == "" {
+		return errors.New("must have a DependencyTrack api url")
+	}
+	if c.DependencyTrackApiKey == "" {
+		return errors.New("must have a DependencyTrack api key")
+	}
+	return nil
 }
 
 // getConfiguration retrieves the active configuration under lock, making it safe to use
@@ -64,8 +83,9 @@ func (p *Plugin) setConfiguration(configuration *configuration) {
 
 		panic("setConfiguration called with the existing configuration")
 	}
-
+	configuration.WebhooksSecret = strings.TrimSpace(configuration.WebhooksSecret)
 	p.configuration = configuration
+
 }
 
 // OnConfigurationChange is invoked when configuration changes may have been made.
@@ -78,6 +98,35 @@ func (p *Plugin) OnConfigurationChange() error {
 	}
 
 	p.setConfiguration(configuration)
+
+	command, err := p.getCommand(configuration)
+	if err != nil {
+		return errors.Wrap(err, "failed to get command")
+	}
+
+	err = p.API.RegisterCommand(command)
+
+	if err != nil {
+		return errors.Wrap(err, "failed to register command")
+	}
+
+	config := p.getConfiguration()
+	if err := config.IsValid(); err != nil {
+		return err
+	}
+
+	dtrackConfig, err := p.fetchConfig()
+	if err != nil {
+		return err
+	}
+
+	if len(dtrackConfig.ApiBaseUrl) < 1 {
+		return errors.New("failed to get API_BASE_URL from the configured DependencyTrack instance")
+	}
+
+	p.configuration.DependencyTrackApiUrl = dtrackConfig.ApiBaseUrl
+
+	p.API.LogInfo("Reloaded configuration")
 
 	return nil
 }
