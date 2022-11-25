@@ -239,7 +239,7 @@ func (p *Plugin) httpHandleUpdateVulnerability(w http.ResponseWriter, r *http.Re
 		err = p.updateAnalysis(projectId, vulnerabilityId, vulnComponentId, analysis, user.Username)
 
 		if err != nil {
-			errorMessage := fmt.Sprintf("- Error while updating the analysis status for projectId: %s, vulnerabilityId: %s, componentId: %s, analysis: %s", projectId, vulnerabilityId, vulnComponentId, analysis)
+			errorMessage := fmt.Sprintf("- Error while updating the analysis status for projectId: %s, vulnerabilityId: %s, componentId: %s", projectId, vulnerabilityId, vulnComponentId)
 			p.API.LogError(errorMessage, "error", err.Error())
 			errorMessages += errorMessage
 			continue
