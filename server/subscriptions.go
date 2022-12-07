@@ -197,7 +197,7 @@ func (p *Plugin) handleUnsubscribe(args *model.CommandArgs, ID string) (*model.C
 		msg := fmt.Sprintf("Something went wrong while unsubscribing. Error: %s\n", err.Error())
 		return p.sendEphemeralResponse(args, msg), nil
 	}
-	msg := "Successfully unsubscribed! The specified channel will not receive DependencyTrack notifications."
+	msg := "Successfully unsubscribed! The specified channel will not receive DependencyTrack notifications anymore."
 	return p.sendEphemeralResponse(args, msg), nil
 }
 

@@ -41,14 +41,14 @@ func (p *Plugin) httpHandleUpdateVulnerability(w http.ResponseWriter, r *http.Re
 	userID := r.Header.Get("Mattermost-User-Id")
 	requestData := model.PostActionIntegrationRequestFromJson(r.Body)
 	if requestData == nil {
-		p.API.LogError("Empty request data", "request", r)
+		p.API.LogError("Received empty request data. Not processing the webhook request.")
 		return
 	}
 
 	responsePost, err := p.API.GetPost(requestData.PostId)
 
 	if err != nil {
-		p.API.LogError("Unable to fetch post Id", err)
+		p.API.LogError("Unable to fetch post Id", "error", err.Error())
 		p.respondAndLogErr(w, http.StatusInternalServerError, errors.WithMessage(err, "Post not found"))
 		return
 	}
@@ -56,7 +56,7 @@ func (p *Plugin) httpHandleUpdateVulnerability(w http.ResponseWriter, r *http.Re
 	// Check if user is found
 	user, err := p.API.GetUser(userID)
 	if err != nil {
-		p.API.LogError("User not found", err)
+		p.API.LogError("User not found", "error", err.Error())
 		p.respondAndLogErr(w, http.StatusInternalServerError, errors.WithMessage(err, "User not found"))
 		return
 	}
@@ -67,7 +67,7 @@ func (p *Plugin) httpHandleUpdateVulnerability(w http.ResponseWriter, r *http.Re
 		return
 	}
 
-	vulnActions := []string{"Exploitable", "False Positive", "Not Affected", "New"}
+	vulnActions := []string{actionExploitable, actionFalsePositive, actionNotAffected, actionNew}
 
 	// Get Context info
 	vulnerability := fmt.Sprintf("%s", requestData.Context["Vulnerability"])
@@ -78,7 +78,7 @@ func (p *Plugin) httpHandleUpdateVulnerability(w http.ResponseWriter, r *http.Re
 	projectIdsArr := strings.Split(projectIds, ",")
 
 	// Check if action is in one of the allowed list
-	if !contains(vulnActions, action) && action != "Suppress" {
+	if !contains(vulnActions, action) && action != actionSuppress {
 		p.respondAndLogErr(w, http.StatusInternalServerError, errors.WithMessage(err, "Invalid action"))
 		return
 	}
@@ -88,15 +88,15 @@ func (p *Plugin) httpHandleUpdateVulnerability(w http.ResponseWriter, r *http.Re
 
 	// Reset previous Status, Status Updated By & Suppressed By fields
 	newFields := []*model.SlackAttachmentField{}
-	if action == "Suppress" {
+	if action == actionSuppress {
 		for _, field := range attachment.Fields {
-			if !strings.Contains(field.Title, "Suppressed") {
+			if !strings.Contains(field.Title, actionSuppressed) {
 				newFields = append(newFields, field)
 			}
 		}
 	} else {
 		for _, field := range attachment.Fields {
-			if !strings.Contains(field.Title, "Status") && !strings.Contains(field.Title, "Suppressed") {
+			if !strings.Contains(field.Title, "Status") && !strings.Contains(field.Title, actionSuppressed) {
 				newFields = append(newFields, field)
 			}
 		}
@@ -117,7 +117,7 @@ func (p *Plugin) httpHandleUpdateVulnerability(w http.ResponseWriter, r *http.Re
 	responsePost.Message = ""
 
 	// Provide Mark as New Option
-	if action != "New" {
+	if action != actionNew {
 		attachment.Actions = append(attachment.Actions,
 			&model.PostAction{
 				Id:   "markNew",
@@ -129,7 +129,7 @@ func (p *Plugin) httpHandleUpdateVulnerability(w http.ResponseWriter, r *http.Re
 						"ComponentId":     componentId,
 						"VulnerabilityId": vulnerabilityId,
 						"ProjectIds":      projectIds,
-						"Action":          "New",
+						"Action":          actionNew,
 						"Vulnerability":   vulnerability,
 					},
 				},
@@ -140,7 +140,7 @@ func (p *Plugin) httpHandleUpdateVulnerability(w http.ResponseWriter, r *http.Re
 
 	// Update Status
 	switch action {
-	case "False Positive", "Not Affected":
+	case actionFalsePositive, actionNotAffected:
 		// Provide option to Suppress the vulnerability if False Positive/Not affected
 		attachment.Actions = append(attachment.Actions,
 			&model.PostAction{
@@ -159,13 +159,13 @@ func (p *Plugin) httpHandleUpdateVulnerability(w http.ResponseWriter, r *http.Re
 				},
 			},
 		)
-		attachment.Color = "#8eb8e8" // blue
+		attachment.Color = lightBlueColor
 
-	case "New":
+	case actionNew:
 		// Reset and show the 3 options again
-		attachment.Color = "#FF8000" // red
+		attachment.Color = redColor
 		attachment.Actions = []*model.PostAction{}
-		newActions := []string{"Exploitable", "False Positive", "Not Affected"}
+		newActions := []string{actionExploitable, actionFalsePositive, actionNotAffected}
 
 		for _, act := range newActions {
 			actionId := strings.ReplaceAll(act, " ", "")
@@ -188,16 +188,16 @@ func (p *Plugin) httpHandleUpdateVulnerability(w http.ResponseWriter, r *http.Re
 			)
 		}
 
-	case "Suppress":
+	case actionSuppress:
 		attachment.Fields = append(attachment.Fields, &model.SlackAttachmentField{
 			Title: "Suppressed By",
 			Value: fmt.Sprintf("@%s", user.Username),
 			Short: false,
 		})
-		attachment.Color = "#7d7a7b" // grey
+		attachment.Color = greyColor
 
 	default:
-		attachment.Color = "#e61220" // red
+		attachment.Color = redColor
 	}
 
 	responsePost.AddProp("attachments", []*model.SlackAttachment{
@@ -266,15 +266,15 @@ func (p *Plugin) httpHandleUpdateVulnerability(w http.ResponseWriter, r *http.Re
 func (p *Plugin) ActionToAnalysis(action string) FindingAnalysis {
 	analysis := FindingAnalysis{Suppressed: false}
 	switch action {
-	case "New":
-		analysis.State = "NOT_SET"
-	case "Exploitable":
-		analysis.State = "EXPLOITABLE"
-	case "False Positive":
-		analysis.State = "FALSE_POSITIVE"
-	case "Not Affected":
-		analysis.State = "NOT_AFFECTED"
-	case "Suppress":
+	case actionNew:
+		analysis.State = analysisNotSet
+	case actionExploitable:
+		analysis.State = analysisExploitable
+	case actionFalsePositive:
+		analysis.State = analysisFalsePositive
+	case actionNotAffected:
+		analysis.State = analysisNotAffected
+	case actionSuppress:
 		analysis.Suppressed = true
 	}
 	return analysis

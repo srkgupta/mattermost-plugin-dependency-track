@@ -71,9 +71,11 @@ func (p *Plugin) ensureAuthorized(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		p.API.LogError("Error while checking for isAuthorized in autocompleting projects", err)
 		http.NotFound(w, r)
+		return
 	}
 	if !isAllowed {
 		http.NotFound(w, r)
+		return
 	}
 }
 

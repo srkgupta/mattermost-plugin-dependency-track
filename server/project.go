@@ -188,7 +188,7 @@ func (p *Plugin) handleProjectSync(args *model.CommandArgs, split []string) (*mo
 		return p.sendEphemeralResponse(args, msg), nil
 	}
 
-	msg := fmt.Sprintf("There were no open findings foumd in the target project %s. No sync actions were performed.", targetProject.Name)
+	msg := fmt.Sprintf("There were no open findings found in the target project %s. No sync actions were performed.", targetProject.Name)
 	return p.sendEphemeralResponse(args, msg), nil
 }
 

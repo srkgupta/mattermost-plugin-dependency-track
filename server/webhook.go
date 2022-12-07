@@ -10,6 +10,35 @@ import (
 	"github.com/mattermost/mattermost-server/v5/model"
 )
 
+const (
+	nvd                     = "NVD"
+	nvdSite                 = "https://nvd.nist.gov/vuln/detail/%s"
+	npm                     = "NPM"
+	npmSite                 = "https://github.com/advisories/%s"
+	vulndb                  = "VULNDB"
+	vulndbSite              = "https://vuldb.com/?id.%s"
+	actionSuppress          = "Suppress"
+	actionFalsePositive     = "False Positive"
+	actionNotAffected       = "Not Affected"
+	actionNew               = "New"
+	actionExploitable       = "Exploitable"
+	actionSuppressed        = "Suppressed"
+	newVulnerability        = "NEW_VULNERABILITY"
+	analysisNotSet          = "NOT_SET"
+	analysisNotAffected     = "NOT_AFFECTED"
+	analysisExploitable     = "EXPLOITABLE"
+	analysisFalsePositive   = "FALSE_POSITIVE"
+	newVulnerableDependency = "NEW_VULNERABLE_DEPENDENCY"
+	bomConsumed             = "BOM_CONSUMED"
+	bomProcessed            = "BOM_PROCESSED"
+	orangeColor             = "#FF8000"
+	lightBlueColor          = "#ADD8E6"
+	redColor                = "#FF0000"
+	darkRedColor            = "#800000"
+	greenColor              = "#50F100"
+	greyColor               = "#7d7a7b"
+)
+
 // WebhookInfo from the webhook
 type WebhookInfo struct {
 	Notification       Notification `json:"notification"`
@@ -19,12 +48,12 @@ type WebhookInfo struct {
 func (vuln *Vulnerability) ToUrl() string {
 	url := ""
 	switch vuln.Source {
-	case "NVD":
-		url = fmt.Sprintf("https://nvd.nist.gov/vuln/detail/%s", vuln.VulnId)
-	case "NPM":
-		url = fmt.Sprintf("https://github.com/advisories/%s", vuln.VulnId)
-	case "VULNDB":
-		url = fmt.Sprintf("https://vuldb.com/?id.%s", vuln.VulnId)
+	case nvd:
+		url = fmt.Sprintf(nvdSite, vuln.VulnId)
+	case npm:
+		url = fmt.Sprintf(npmSite, vuln.VulnId)
+	case vulndb:
+		url = fmt.Sprintf(vulndbSite, vuln.VulnId)
 	}
 	return url
 }
@@ -38,17 +67,17 @@ func (vuln *Vulnerability) ToMarkdown() string {
 }
 
 func (vuln *Vulnerability) ToColor() string {
-	color := "#50F100" // green
+	color := greenColor
 
 	switch strings.ToUpper(vuln.Severity) {
 	case "LOW":
-		color = "#ADD8E6" // light blue
+		color = lightBlueColor
 	case "MEDIUM":
-		color = "#FF8000" // orange
+		color = orangeColor
 	case "HIGH":
-		color = "#FF0000" // red
+		color = redColor
 	case "CRITICAL":
-		color = "#800000" // dark red
+		color = darkRedColor
 	}
 	return color
 }
@@ -59,13 +88,13 @@ func (wi *WebhookInfo) ToPost() *model.Post {
 	attachment := &model.SlackAttachment{
 		Title: wi.Notification.Title,
 		Text:  wi.Notification.Content,
-		Color: "#50F100", // green
+		Color: greenColor,
 	}
 
 	fields := []*model.SlackAttachmentField{}
 
 	switch strings.ToUpper(wi.Notification.Group) {
-	case "NEW_VULNERABILITY":
+	case newVulnerability:
 		fields = append(fields, &model.SlackAttachmentField{
 			Title: "VulnID",
 			Value: wi.Notification.Subject.Vulnerability.ToMarkdown(),
@@ -106,7 +135,7 @@ func (wi *WebhookInfo) ToPost() *model.Post {
 		}
 
 		attachment.Actions = []*model.PostAction{}
-		vulnActions := []string{"Exploitable", "False Positive", "Not Affected"}
+		vulnActions := []string{actionExploitable, actionFalsePositive, actionNotAffected}
 
 		for _, action := range vulnActions {
 			actionId := strings.ReplaceAll(action, " ", "")
@@ -129,17 +158,17 @@ func (wi *WebhookInfo) ToPost() *model.Post {
 			)
 		}
 
-	case "BOM_CONSUMED", "BOM_PROCESSED":
+	case bomConsumed, bomProcessed:
 		fields = append(fields, &model.SlackAttachmentField{
 			Title: "Project",
 			Value: wi.Notification.Subject.Project.ToMarkdown(wi.DependencyTrackUrl),
 			Short: true,
 		})
-		if wi.Notification.Group == "BOM_CONSUMED" {
-			attachment.Color = "#FF8000" // orange
+		if wi.Notification.Group == bomConsumed {
+			attachment.Color = orangeColor
 		}
 
-	case "NEW_VULNERABLE_DEPENDENCY":
+	case newVulnerableDependency:
 		fields = append(fields, &model.SlackAttachmentField{
 			Title: "Component",
 			Value: wi.Notification.Subject.Component.PackageUrl,
@@ -162,7 +191,7 @@ func (wi *WebhookInfo) ToPost() *model.Post {
 			Short: false,
 		})
 
-		attachment.Color = "#FF0000" // red
+		attachment.Color = redColor
 	}
 
 	attachment.Fields = fields
@@ -212,7 +241,7 @@ func (wi *WebhookInfo) vulnPost(vuln Vulnerability) *model.Post {
 	}
 	vulnAttachment.Fields = vulnFields
 	vulnAttachment.Actions = []*model.PostAction{}
-	vulnActions := []string{"Exploitable", "False Positive", "Not Affected"}
+	vulnActions := []string{actionExploitable, actionFalsePositive, actionNotAffected}
 
 	for _, action := range vulnActions {
 		actionId := strings.ReplaceAll(action, " ", "")
@@ -268,7 +297,7 @@ func (p *Plugin) httpHandleWebhook(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Check status of vulnerability with reference project. If an analysis was found, update the status of affected Projects accordingly
-	if len(referenceProject) > 0 && wi.Notification.Group == "NEW_VULNERABILITY" {
+	if len(referenceProject) > 0 && wi.Notification.Group == newVulnerability {
 
 		//Find Component Id for reference Project and vuln id
 		componentId, err := p.findComponentIdForVulnerability(referenceProject, wi.Notification.Subject.Vulnerability.Source, wi.Notification.Subject.Vulnerability.VulnId)
@@ -282,7 +311,7 @@ func (p *Plugin) httpHandleWebhook(w http.ResponseWriter, r *http.Request) {
 				p.API.LogDebug("Unable to fetch Analysis for the default project", "err", err.Error())
 			}
 
-			if len(analysis.State) > 0 && analysis.State != "NOT_SET" {
+			if len(analysis.State) > 0 && analysis.State != analysisNotSet {
 
 				// Update the status of the finding accordingly and suppress if previously suppressed.
 				for _, project := range wi.Notification.Subject.Projects {
@@ -319,7 +348,7 @@ func (p *Plugin) httpHandleWebhook(w http.ResponseWriter, r *http.Request) {
 			p.API.LogError("Failed to create Post", "appError", appErr)
 		}
 
-		if wi.Notification.Group == "NEW_VULNERABLE_DEPENDENCY" {
+		if wi.Notification.Group == newVulnerableDependency {
 			// Add a Reply Post for each vulnerability and provide options
 			for _, vuln := range wi.Notification.Subject.Vulnerabilities {
 				vulnPost := wi.vulnPost(vuln)

@@ -1,7 +1,7 @@
 {
-    "id": "mattermost-plugin-dependency-track",
-    "name": "DependencyTrack Plugin",
-    "description": "DependencyTrack plugin for Mattermost.",
+    "id": "dependency-track",
+    "name": "DependencyTrack",
+    "description": "Subscribe to DependencyTrack notifications, stay up-to-date with all the alerts generated on the DependencyTrack tool, and other common DependencyTrack actions.",
     "homepage_url": "https://github.com/srkgupta/mattermost-plugin-dependency-track",
     "support_url": "https://github.com/mattermost/mattermost-plugin-dependency-track/issues",
     "release_notes_url": "https://github.com/mattermost/mattermost-plugin-dependency-track/releases/tag/v1.0.0",
