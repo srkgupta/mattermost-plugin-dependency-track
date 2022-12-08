@@ -36,7 +36,9 @@ func (p *Plugin) ServeHTTP(c *plugin.Context, w http.ResponseWriter, r *http.Req
 
 func (p *Plugin) httpHandleUpdateVulnerability(w http.ResponseWriter, r *http.Request) {
 	// Check if user is allowed to perform
-	p.ensureAuthorized(w, r)
+	if !p.ensureAuthorized(w, r) {
+		return
+	}
 
 	userID := r.Header.Get("Mattermost-User-Id")
 	requestData := model.PostActionIntegrationRequestFromJson(r.Body)

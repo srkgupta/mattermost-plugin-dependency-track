@@ -194,7 +194,9 @@ func (p *Plugin) handleProjectSync(args *model.CommandArgs, split []string) (*mo
 
 func (p *Plugin) autocompleteProjects(w http.ResponseWriter, r *http.Request) {
 	// Check if user is allowed to perform
-	p.ensureAuthorized(w, r)
+	if !p.ensureAuthorized(w, r) {
+		return
+	}
 
 	// Fetch Projects
 	projects, err := p.fetchProjects()
