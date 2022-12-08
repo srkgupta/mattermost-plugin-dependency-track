@@ -69,7 +69,7 @@ func (p *Plugin) ensureAuthorized(w http.ResponseWriter, r *http.Request) bool {
 	userID := r.Header.Get("Mattermost-User-Id")
 	isAllowed, err := p.IsAuthorized(userID)
 	if err != nil {
-		p.API.LogError("Error while checking for isAuthorized", err)
+		p.API.LogError("Error while checking for isAuthorized", "error", err.Error())
 		http.NotFound(w, r)
 		return false
 	}
